@@ -1,15 +1,22 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  CalendarClock,
   CircleCheck,
   CircleDot,
   CircleX,
   ExternalLink,
+  GitPullRequest,
   Info,
   MapPin,
+  MessageSquare,
   Rocket,
+  ShieldAlert,
+  Siren,
   TrendingDown,
   TrendingUp,
+  UserMinus,
+  UserPlus,
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
@@ -36,6 +43,13 @@ const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   success: { icon: CircleDot, color: "#2dc26b" },
   money_in: { icon: TrendingUp, color: "#2dc26b" },
   money_out: { icon: TrendingDown, color: "#e03131" },
+  security: { icon: ShieldAlert, color: "#f59f00" },
+  incident: { icon: Siren, color: "#e03131" },
+  user_joined: { icon: UserPlus, color: "#2dc26b" },
+  user_left: { icon: UserMinus, color: "#868e96" },
+  scheduled: { icon: CalendarClock, color: "#868e96" },
+  review: { icon: GitPullRequest, color: "#9c36b5" },
+  message: { icon: MessageSquare, color: "#1c7ed6" },
   generic: { icon: MapPin, color: "#868e96" },
 };
 
