@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - run: go vet ./...
@@ -19,38 +19,39 @@ jobs:
 
   webapp:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: webapp
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: webapp/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx biome check .
-      - run: npx vitest run
-      - run: npx vite build
+      - run: make apply
+      - run: cd webapp && npm ci
+      - run: cd webapp && npx tsc --noEmit
+      - run: cd webapp && npx biome check .
+      - run: cd webapp && npx vitest run
+      - run: cd webapp && npx vite build
 
   build:
     runs-on: ubuntu-latest
     needs: [server, webapp]
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: webapp/package-lock.json
       - run: cd webapp && npm ci
       - run: make dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin-bundle
           path: dist/*.tar.gz
