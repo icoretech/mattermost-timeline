@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/icoretech/mattermost-timeline/compare/v1.0.0...v1.1.0) (2026-03-19)
+
+
+### Features
+
+* add configurable timeline order setting ([e7cce38](https://github.com/icoretech/mattermost-timeline/commit/e7cce3860325b4e4a4a11886acae69986b3a65e1))
+* add multi-link pills, external_id deduplication, and update animations ([c37d924](https://github.com/icoretech/mattermost-timeline/commit/c37d92496b6ba3791d9828522fc05c60b954d2e9))
+
+
+### Bug Fixes
+
+* remove quotes from help_text to fix manifest template literal parsing ([a7040a3](https://github.com/icoretech/mattermost-timeline/commit/a7040a39da5f724de1fd7ee96467456854984355))
+
 ## [1.0.0](https://github.com/icoretech/mattermost-timeline/compare/v0.1.2...v1.0.0) (2026-03-19)
 
 
