@@ -95,7 +95,7 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
 | `message` | string | no | Event description (supports Markdown) |
 | `link` | string | no | Single URL (legacy, prefer `links`) |
 | `links` | array | no | Array of `{url, label?}` objects displayed as inline pills |
-| `event_type` | string | no | One of: `host_online`, `host_offline`, `deploy`, `alert`, `error`, `info`, `success`, `generic` |
+| `event_type` | string | no | One of: `host_online`, `host_offline`, `deploy`, `alert`, `error`, `info`, `success`, `money_in`, `money_out`, `generic` |
 | `source` | string | no | Source system label (e.g., "monitoring", "ci/cd") |
 | `external_id` | string | no | Idempotency key. Subsequent webhooks with the same `external_id` update the existing event (fields are replaced, links are aggregated) |
 

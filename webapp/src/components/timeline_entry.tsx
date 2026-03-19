@@ -8,6 +8,8 @@ import {
   Info,
   MapPin,
   Rocket,
+  TrendingDown,
+  TrendingUp,
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
@@ -32,6 +34,8 @@ const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   error: { icon: XCircle, color: "#e03131" },
   info: { icon: Info, color: "#1c7ed6" },
   success: { icon: CircleDot, color: "#2dc26b" },
+  money_in: { icon: TrendingUp, color: "#2dc26b" },
+  money_out: { icon: TrendingDown, color: "#e03131" },
   generic: { icon: MapPin, color: "#868e96" },
 };
 
