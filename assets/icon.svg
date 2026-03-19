@@ -1,3 +1,85 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- Ambient glow blobs -->
+    <radialGradient id="glow1" cx="30%" cy="25%" r="50%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="75%" cy="70%" r="45%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow3" cx="20%" cy="80%" r="35%">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Glass card filter -->
+    <filter id="glass-blur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"/>
+    </filter>
+
+    <!-- Dot glow -->
+    <filter id="dot-glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" ry="96" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="96" ry="96" fill="url(#glow1)"/>
+  <rect width="512" height="512" rx="96" ry="96" fill="url(#glow2)"/>
+  <rect width="512" height="512" rx="96" ry="96" fill="url(#glow3)"/>
+
+  <!-- Subtle noise texture via fine pattern -->
+  <rect width="512" height="512" rx="96" ry="96" fill="white" opacity="0.02"/>
+
+  <!-- Glass card panel -->
+  <rect x="60" y="70" width="392" height="372" rx="24" ry="24"
+        fill="white" fill-opacity="0.07"
+        stroke="white" stroke-opacity="0.15" stroke-width="1.5"/>
+  <!-- Glass card inner highlight (top edge) -->
+  <rect x="61" y="71" width="390" height="60" rx="24" ry="24"
+        fill="white" fill-opacity="0.05"/>
+
+  <!-- Timeline vertical line -->
+  <line x1="145" y1="115" x2="145" y2="400" stroke="white" stroke-opacity="0.12" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Event 1: Green / success -->
+  <circle cx="145" cy="155" r="18" fill="#22c55e" fill-opacity="0.2" filter="url(#dot-glow)"/>
+  <circle cx="145" cy="155" r="12" fill="#22c55e" filter="url(#dot-glow)"/>
+  <circle cx="145" cy="155" r="5" fill="white" opacity="0.9"/>
+  <!-- Glass text bars -->
+  <rect x="182" y="143" width="220" height="11" rx="5.5" fill="white" fill-opacity="0.5"/>
+  <rect x="182" y="161" width="150" height="8" rx="4" fill="white" fill-opacity="0.2"/>
+
+  <!-- Event 2: Amber / warning -->
+  <circle cx="145" cy="258" r="18" fill="#f59e0b" fill-opacity="0.2" filter="url(#dot-glow)"/>
+  <circle cx="145" cy="258" r="12" fill="#f59e0b" filter="url(#dot-glow)"/>
+  <polygon points="145,249 153,265 137,265" fill="white" opacity="0.9"/>
+  <!-- Glass text bars -->
+  <rect x="182" y="246" width="240" height="11" rx="5.5" fill="white" fill-opacity="0.5"/>
+  <rect x="182" y="264" width="170" height="8" rx="4" fill="white" fill-opacity="0.2"/>
+
+  <!-- Event 3: Red / error -->
+  <circle cx="145" cy="361" r="18" fill="#ef4444" fill-opacity="0.2" filter="url(#dot-glow)"/>
+  <circle cx="145" cy="361" r="12" fill="#ef4444" filter="url(#dot-glow)"/>
+  <line x1="140" y1="356" x2="150" y2="366" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+  <line x1="150" y1="356" x2="140" y2="366" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+  <!-- Glass text bars -->
+  <rect x="182" y="349" width="190" height="11" rx="5.5" fill="white" fill-opacity="0.5"/>
+  <rect x="182" y="367" width="130" height="8" rx="4" fill="white" fill-opacity="0.2"/>
+
+  <!-- Subtle top-left shine reflection -->
+  <ellipse cx="160" cy="120" rx="120" ry="60" fill="white" opacity="0.03" transform="rotate(-20 160 120)"/>
 </svg>

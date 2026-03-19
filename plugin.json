@@ -5,6 +5,7 @@
     "version": "0.1.2",
     "homepage_url": "https://github.com/icoretech/mattermost-timeline",
     "support_url": "https://github.com/icoretech/mattermost-timeline/issues",
+    "release_notes_url": "https://github.com/icoretech/mattermost-timeline/releases",
     "icon_path": "assets/icon.svg",
     "min_server_version": "7.0.0",
     "server": {

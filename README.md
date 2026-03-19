@@ -1,4 +1,4 @@
-# Mattermost Timeline
+# <img src="assets/icon.svg" width="32" height="32" alt="icon"> Mattermost Timeline
 
 [![CI](https://github.com/icoretech/mattermost-timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/icoretech/mattermost-timeline/actions/workflows/ci.yml)
 [![Release](https://github.com/icoretech/mattermost-timeline/actions/workflows/release.yml/badge.svg)](https://github.com/icoretech/mattermost-timeline/actions/workflows/release.yml)
@@ -10,7 +10,9 @@ A Mattermost plugin that displays a real-time animated timeline of events from e
 External services push events via HTTP webhooks. New entries animate into the timeline with support for Markdown messages, event types, source badges, and clickable links.
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="Mattermost Timeline screenshot" width="400" />
+  <img src="assets/screenshot-light.png" alt="Light mode" width="380" />
+  &nbsp;&nbsp;
+  <img src="assets/screenshot-dark.png" alt="Dark mode" width="380" />
 </p>
 
 ## Features
@@ -32,6 +34,24 @@ External services push events via HTTP webhooks. New entries animate into the ti
 ## Installation
 
 Download the latest release from the [Releases](https://github.com/icoretech/mattermost-timeline/releases) page and upload the `.tar.gz` file through **System Console > Plugin Management**.
+
+### Signature Verification
+
+Releases include a detached GPG signature (`.tar.gz.sig`). To verify:
+
+```bash
+# Import the public key
+curl -sL https://raw.githubusercontent.com/icoretech/mattermost-timeline/main/assets/signing-key.asc | gpg --import
+
+# Verify the bundle
+gpg --verify ch.icorete.mattermost-timeline-*.tar.gz.sig ch.icorete.mattermost-timeline-*.tar.gz
+```
+
+To add the key to your Mattermost server for automatic verification:
+
+```bash
+mmctl plugin add key assets/signing-key.asc
+```
 
 ## Configuration
 
@@ -119,7 +139,11 @@ make deploy
 
 ## Releases
 
-This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Merging to `main` creates a release PR that, when merged, publishes a GitHub release with the plugin bundle attached.
+This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Merging to `main` creates a release PR that, when merged, publishes a signed GitHub release with the plugin bundle attached.
+
+## Security
+
+To report a security vulnerability, please email [masterkain@gmail.com](mailto:masterkain@gmail.com).
 
 ## License
 
