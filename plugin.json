@@ -1,0 +1,49 @@
+{
+    "id": "ch.icoretech.mattermost-timeline",
+    "name": "Mattermost Timeline",
+    "description": "Real-time animated timeline of events from external webhooks, displayed in the right-hand sidebar.",
+    "homepage_url": "https://github.com/icoretech/mattermost-timeline",
+    "support_url": "https://github.com/icoretech/mattermost-timeline/issues",
+    "icon_path": "assets/icon.svg",
+    "min_server_version": "7.0.0",
+    "server": {
+        "executables": {
+            "linux-amd64": "server/dist/plugin-linux-amd64",
+            "linux-arm64": "server/dist/plugin-linux-arm64",
+            "darwin-amd64": "server/dist/plugin-darwin-amd64",
+            "darwin-arm64": "server/dist/plugin-darwin-arm64",
+            "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+        }
+    },
+    "webapp": {
+        "bundle_path": "webapp/dist/main.js"
+    },
+    "settings_schema": {
+        "header": "Configure the Mattermost Timeline plugin.",
+        "footer": "",
+        "settings": [
+            {
+                "key": "WebhookSecret",
+                "display_name": "Webhook Secret",
+                "type": "text",
+                "help_text": "Shared secret for authenticating incoming webhooks. External services must send this in the X-Webhook-Secret header.",
+                "default": "",
+                "secret": true
+            },
+            {
+                "key": "MaxEventsStored",
+                "display_name": "Maximum Events Stored",
+                "type": "text",
+                "help_text": "Maximum number of events to persist per team. Oldest events are pruned when this limit is exceeded. Default: 500.",
+                "default": "500"
+            },
+            {
+                "key": "MaxEventsDisplayed",
+                "display_name": "Maximum Events Displayed",
+                "type": "text",
+                "help_text": "Maximum number of events shown in the timeline at once. Default: 100.",
+                "default": "100"
+            }
+        ]
+    }
+}
