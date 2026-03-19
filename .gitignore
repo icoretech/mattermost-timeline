@@ -1,6 +1,5 @@
 bin/
 dist/
-build/
 coverage/
 webapp/src/manifest.ts
 server/manifest.go
