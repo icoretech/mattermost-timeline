@@ -62,6 +62,7 @@ After enabling the plugin, configure it in **System Console > Plugins > Mattermo
 | Webhook Secret | Shared secret for authenticating incoming webhooks | _(empty)_ |
 | Max Events Stored | Maximum events to persist per team | 500 |
 | Max Events Displayed | Maximum events shown in the timeline | 100 |
+| Timeline Order | Display order: "Oldest first" (newest at bottom) or "Newest first" (newest at top) | Oldest first |
 
 ## Webhook API
 
