@@ -2,7 +2,7 @@
     "id": "ch.icorete.mattermost-timeline",
     "name": "Mattermost Timeline",
     "description": "Real-time animated timeline of events from external webhooks, displayed in the right-hand sidebar.",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "homepage_url": "https://github.com/icoretech/mattermost-timeline",
     "support_url": "https://github.com/icoretech/mattermost-timeline/issues",
     "icon_path": "assets/icon.svg",
