@@ -4,6 +4,7 @@ import {
   CircleCheck,
   CircleDot,
   CircleX,
+  ExternalLink,
   Info,
   MapPin,
   Rocket,
@@ -11,12 +12,14 @@ import {
 } from "lucide-react";
 import React, { useCallback } from "react";
 
-import type { EventEntry } from "../types";
+import type { EventEntry, EventLink } from "../types";
 
 interface Props {
   event: EventEntry;
   isNew: boolean;
+  isUpdated: boolean;
   onAnimationEnd: (eventId: string) => void;
+  onUpdateAnimationEnd: (eventId: string) => void;
 }
 
 const ICON_SIZE = 18;
@@ -126,19 +129,41 @@ export function renderMarkdown(text: string): React.ReactNode[] {
   return parts;
 }
 
-const TimelineEntry: React.FC<Props> = ({ event, isNew, onAnimationEnd }) => {
+const TimelineEntry: React.FC<Props> = ({
+  event,
+  isNew,
+  isUpdated,
+  onAnimationEnd,
+  onUpdateAnimationEnd,
+}) => {
   const config =
     EVENT_TYPE_CONFIG[event.event_type] || EVENT_TYPE_CONFIG.generic;
   const IconComponent = config.icon;
 
   const handleAnimationEnd = useCallback(() => {
-    onAnimationEnd(event.id);
-  }, [onAnimationEnd, event.id]);
+    if (isNew) {
+      onAnimationEnd(event.id);
+    } else if (isUpdated) {
+      onUpdateAnimationEnd(event.id);
+    }
+  }, [onAnimationEnd, onUpdateAnimationEnd, event.id, isNew, isUpdated]);
+
+  let className = "timeline-entry";
+  if (isNew) className += " timeline-entry--new";
+  else if (isUpdated) className += " timeline-entry--updated";
+
+  // Normalize: prefer links array, fall back to single link
+  const links: EventLink[] =
+    event.links && event.links.length > 0
+      ? event.links
+      : event.link
+        ? [{ url: event.link }]
+        : [];
 
   return (
     <div
-      className={`timeline-entry ${isNew ? "timeline-entry--new" : ""}`}
-      onAnimationEnd={isNew ? handleAnimationEnd : undefined}
+      className={className}
+      onAnimationEnd={isNew || isUpdated ? handleAnimationEnd : undefined}
     >
       <div className="timeline-entry__gutter">
         <div className="timeline-entry__dot">
@@ -181,15 +206,22 @@ const TimelineEntry: React.FC<Props> = ({ event, isNew, onAnimationEnd }) => {
             {renderMarkdown(event.message)}
           </div>
         )}
-        {event.link && (
-          <a
-            className="timeline-entry__link"
-            href={event.link}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {"Open Link →"}
-          </a>
+        {links.length > 0 && (
+          <div className="timeline-entry__links">
+            {links.map((l: EventLink) => (
+              <a
+                key={l.url}
+                className="timeline-entry__link-icon"
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={l.label || l.url}
+              >
+                <ExternalLink size={13} strokeWidth={2} />
+                <span>{l.label || "Link"}</span>
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>

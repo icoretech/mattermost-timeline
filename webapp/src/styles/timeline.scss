@@ -10,6 +10,19 @@
     }
 }
 
+// Flash highlight for updated entries
+@keyframes flash {
+    0% {
+        background-color: rgba(var(--button-bg-rgb, 28, 88, 217), 0.15);
+    }
+    50% {
+        background-color: rgba(var(--button-bg-rgb, 28, 88, 217), 0.08);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
 .event-feed-timeline {
     display: flex;
     flex-direction: column;
@@ -40,6 +53,10 @@
 
     &--new {
         animation: fadeSlideIn 0.6s ease-out forwards;
+    }
+
+    &--updated {
+        animation: flash 0.8s ease-out forwards;
     }
 
     &__gutter {
@@ -152,6 +169,39 @@
         &:hover {
             text-decoration: underline;
             color: rgba(var(--button-bg-rgb, 28, 88, 217), 0.8);
+        }
+    }
+
+    &__links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+
+    &__link-icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        color: rgba(var(--button-bg-rgb, 28, 88, 217), 1);
+        background: rgba(var(--button-bg-rgb, 28, 88, 217), 0.08);
+        text-decoration: none;
+        transition: background-color 0.15s ease, color 0.15s ease;
+
+        &:hover {
+            background: rgba(var(--button-bg-rgb, 28, 88, 217), 0.16);
+            color: rgba(var(--button-bg-rgb, 28, 88, 217), 0.9);
+        }
+
+        span {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     }
 

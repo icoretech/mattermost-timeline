@@ -2,7 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { Dispatch } from "redux";
 
-import { clearNewEventFlag, fetchEvents } from "../actions";
+import {
+  clearNewEventFlag,
+  clearUpdatedEventFlag,
+  fetchEvents,
+} from "../actions";
 import { getCurrentTeamId, getPluginState } from "../selectors";
 import type { EventEntry } from "../types";
 
@@ -27,6 +31,7 @@ const RHSView: React.FC = () => {
     isLoading = false,
     error = null,
     newEventIds = [],
+    updatedEventIds = [],
     total = 0,
     timelineOrder = "oldest_first",
   } = pluginState || {};
@@ -77,6 +82,13 @@ const RHSView: React.FC = () => {
     [dispatch],
   );
 
+  const handleUpdateAnimationEnd = useCallback(
+    (eventId: string) => {
+      dispatch(clearUpdatedEventFlag(eventId));
+    },
+    [dispatch],
+  );
+
   const handleLoadMore = useCallback(() => {
     if (currentTeamId && events.length < total) {
       dispatch(fetchEvents(currentTeamId, events.length));
@@ -113,7 +125,9 @@ const RHSView: React.FC = () => {
             key={event.id}
             event={event}
             isNew={newEventIds.includes(event.id)}
+            isUpdated={updatedEventIds.includes(event.id)}
             onAnimationEnd={handleAnimationEnd}
+            onUpdateAnimationEnd={handleUpdateAnimationEnd}
           />
         ))}
         {!isOldestFirst && loadMoreButton}

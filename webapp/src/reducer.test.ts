@@ -32,6 +32,7 @@ describe("reducer", () => {
       error: null,
       total: 0,
       newEventIds: [],
+      updatedEventIds: [],
       timelineOrder: "oldest_first",
     });
   });

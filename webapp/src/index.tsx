@@ -2,7 +2,7 @@ import type { GlobalState } from "@mattermost/types/store";
 import React from "react";
 import type { Store } from "redux";
 import type { PluginRegistry } from "types/mattermost-webapp";
-import { parseNewEventWebSocket } from "./actions";
+import { parseNewEventWebSocket, parseUpdatedEventWebSocket } from "./actions";
 import Icon from "./components/icon";
 import RHSView from "./components/rhs_view";
 import manifest from "./manifest";
@@ -29,6 +29,16 @@ export default class Plugin {
       `custom_${manifest.id}_new_event`,
       (message: NewEventWebSocketMessage) => {
         const action = parseNewEventWebSocket(message.data.event);
+        if (action) {
+          store.dispatch(action);
+        }
+      },
+    );
+
+    registry.registerWebSocketEventHandler(
+      `custom_${manifest.id}_updated_event`,
+      (message: NewEventWebSocketMessage) => {
+        const action = parseUpdatedEventWebSocket(message.data.event);
         if (action) {
           store.dispatch(action);
         }

@@ -18,8 +18,11 @@ External services push events via HTTP webhooks. New entries animate into the ti
 ## Features
 
 - Real-time timeline in the Mattermost RHS (right-hand sidebar)
-- Smooth slide-in animations for new events
+- Smooth slide-in animations for new events, flash highlight on updates
 - Markdown support in event messages (bold, italic, code, links)
+- Multiple labeled links per event, rendered as inline pills
+- Event deduplication via `external_id` with incremental link aggregation
+- Configurable timeline order (newest first or oldest first)
 - Event type icons (deploy, alert, error, host_online, host_offline, etc.)
 - Team-scoped events with per-team KV store persistence
 - Paginated event history with "Load older events" support
@@ -75,7 +78,10 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
   -d '{
     "title": "web-server-01 online",
     "message": "Recovered after **5 minutes** of downtime",
-    "link": "https://monitor.example.com/hosts/01",
+    "links": [
+      {"url": "https://monitor.example.com/hosts/01", "label": "Monitor"},
+      {"url": "https://grafana.example.com/d/uptime", "label": "Dashboard"}
+    ],
     "event_type": "host_online",
     "source": "monitoring"
   }'
@@ -87,9 +93,11 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
 |-------|------|----------|-------------|
 | `title` | string | yes | Event title |
 | `message` | string | no | Event description (supports Markdown) |
-| `link` | string | no | Clickable URL |
+| `link` | string | no | Single URL (legacy, prefer `links`) |
+| `links` | array | no | Array of `{url, label?}` objects displayed as inline pills |
 | `event_type` | string | no | One of: `host_online`, `host_offline`, `deploy`, `alert`, `error`, `info`, `success`, `generic` |
 | `source` | string | no | Source system label (e.g., "monitoring", "ci/cd") |
+| `external_id` | string | no | Idempotency key. Subsequent webhooks with the same `external_id` update the existing event (fields are replaced, links are aggregated) |
 
 ## Development
 

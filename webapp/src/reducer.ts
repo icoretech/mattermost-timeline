@@ -2,8 +2,10 @@ import { combineReducers } from "redux";
 import type { EventFeedAction } from "./actions";
 import {
   CLEAR_NEW_EVENT_FLAG,
+  CLEAR_UPDATED_EVENT_FLAG,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
+  RECEIVED_UPDATED_EVENT,
   SET_ERROR,
   SET_LOADING,
 } from "./actions";
@@ -24,6 +26,13 @@ function events(
         return state;
       }
       return [action.event, ...state];
+    case RECEIVED_UPDATED_EVENT: {
+      if (!action.event) return state;
+      const updated = action.event;
+      // Replace the event in place, then move to front (newest)
+      const filtered = state.filter((e) => e.id !== updated.id);
+      return [updated, ...filtered];
+    }
     default:
       return state;
   }
@@ -54,6 +63,22 @@ function newEventIds(state: string[] = [], action: EventFeedAction): string[] {
     case RECEIVED_NEW_EVENT:
       return action.event ? [...state, action.event.id] : state;
     case CLEAR_NEW_EVENT_FLAG:
+      return action.eventId
+        ? state.filter((id) => id !== action.eventId)
+        : state;
+    default:
+      return state;
+  }
+}
+
+function updatedEventIds(
+  state: string[] = [],
+  action: EventFeedAction,
+): string[] {
+  switch (action.type) {
+    case RECEIVED_UPDATED_EVENT:
+      return action.event ? [...state, action.event.id] : state;
+    case CLEAR_UPDATED_EVENT_FLAG:
       return action.eventId
         ? state.filter((id) => id !== action.eventId)
         : state;
@@ -94,5 +119,6 @@ export default combineReducers({
   error,
   total,
   newEventIds,
+  updatedEventIds,
   timelineOrder,
 });

@@ -485,3 +485,174 @@ func TestWebhookDoesNotRequireAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Invalid webhook secret")
 }
+
+// --- Links tests ---
+
+func TestHandleWebhook_WithLinks(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:   "s3cret",
+		MaxEventsStored: "100",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"deploy","team_id":"team-1","links":[{"url":"https://a.com","label":"Release"},{"url":"https://b.com","label":"CI"}]}`
+
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	require.Len(t, event.Links, 2)
+	assert.Equal(t, "https://a.com", event.Links[0].URL)
+	assert.Equal(t, "Release", event.Links[0].Label)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_LegacyLinkNormalized(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:   "s3cret",
+		MaxEventsStored: "100",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"deploy","team_id":"team-1","link":"https://example.com"}`
+
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	require.Len(t, event.Links, 1)
+	assert.Equal(t, "https://example.com", event.Links[0].URL)
+	api.AssertExpectations(t)
+}
+
+// --- External ID tests ---
+
+func TestHandleWebhook_ExternalID_NewEvent(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:   "s3cret",
+		MaxEventsStored: "100",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"build started","team_id":"team-1","external_id":"build-123","links":[{"url":"https://ci.com/1","label":"CI"}]}`
+
+	// External ID lookup returns nothing (new event)
+	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	// Store external ID mapping
+	api.On("KVSet", "ext_id:team-1:build-123", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "build-123", event.ExternalID)
+	assert.Equal(t, "build started", event.Title)
+	require.Len(t, event.Links, 1)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_ExternalID_UpdateExisting(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:   "s3cret",
+		MaxEventsStored: "100",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	// Existing event stored under this external ID
+	existingEvent := Event{
+		ID:         "evt-existing",
+		TeamID:     "team-1",
+		Timestamp:  1000,
+		Title:      "build started",
+		EventType:  "deploy",
+		ExternalID: "build-123",
+		Links:      []EventLink{{URL: "https://ci.com/1", Label: "CI"}},
+	}
+	existingJSON, _ := json.Marshal(existingEvent)
+
+	// External ID lookup returns existing event ID
+	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte("evt-existing"), (*model.AppError)(nil))
+	api.On("KVGet", "event:evt-existing").Return(existingJSON, (*model.AppError)(nil))
+	// Update event store
+	api.On("KVSet", "event:evt-existing", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	// Update index (move to front)
+	api.On("KVGet", "event_index:team-1").Return([]byte(`["other-1","evt-existing","other-2"]`), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "updated_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
+
+	// Second webhook: different title, new link
+	payload := `{"title":"build completed","team_id":"team-1","external_id":"build-123","event_type":"success","links":[{"url":"https://ci.com/2","label":"Artifacts"}]}`
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var updated Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &updated))
+	assert.Equal(t, "evt-existing", updated.ID, "should keep the same internal ID")
+	assert.Equal(t, "build completed", updated.Title, "title should be replaced")
+	assert.Equal(t, "success", updated.EventType, "event type should be replaced")
+	assert.Greater(t, updated.Timestamp, int64(1000), "timestamp should be updated")
+	require.Len(t, updated.Links, 2, "links should be aggregated")
+	assert.Equal(t, "https://ci.com/1", updated.Links[0].URL)
+	assert.Equal(t, "https://ci.com/2", updated.Links[1].URL)
+	api.AssertExpectations(t)
+}
+
+func TestMergeLinks_DeduplicatesByURL(t *testing.T) {
+	existing := []EventLink{
+		{URL: "https://a.com", Label: "A"},
+		{URL: "https://b.com", Label: "B"},
+	}
+	incoming := []EventLink{
+		{URL: "https://b.com", Label: "B duplicate"},
+		{URL: "https://c.com", Label: "C"},
+	}
+	result := mergeLinks(existing, incoming)
+	require.Len(t, result, 3)
+	assert.Equal(t, "https://a.com", result[0].URL)
+	assert.Equal(t, "https://b.com", result[1].URL)
+	assert.Equal(t, "https://c.com", result[2].URL)
+}

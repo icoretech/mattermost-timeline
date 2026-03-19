@@ -41,6 +41,34 @@ func (p *Plugin) mattermostAuthRequired(next http.Handler) http.Handler {
 	})
 }
 
+// normalizeLinks converts a single legacy link to a links array, or returns the payload links.
+func normalizeLinks(payload WebhookPayload) []EventLink {
+	if len(payload.Links) > 0 {
+		return payload.Links
+	}
+	if payload.Link != "" {
+		return []EventLink{{URL: payload.Link}}
+	}
+	return nil
+}
+
+// mergeLinks appends new links to existing ones, deduplicating by URL.
+func mergeLinks(existing, incoming []EventLink) []EventLink {
+	seen := make(map[string]bool, len(existing))
+	for _, l := range existing {
+		seen[l.URL] = true
+	}
+	merged := make([]EventLink, len(existing))
+	copy(merged, existing)
+	for _, l := range incoming {
+		if !seen[l.URL] {
+			merged = append(merged, l)
+			seen[l.URL] = true
+		}
+	}
+	return merged
+}
+
 func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 
@@ -84,15 +112,68 @@ func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		eventType = "generic"
 	}
 
+	incomingLinks := normalizeLinks(payload)
+
+	// Check for existing event via external_id
+	if payload.ExternalID != "" {
+		existingID, err := p.store.LookupByExternalID(teamID, payload.ExternalID)
+		if err != nil {
+			p.API.LogError("Failed to lookup external ID", "error", err.Error())
+		}
+
+		if existingID != "" {
+			existing, err := p.store.GetEvent(existingID)
+			if err != nil {
+				p.API.LogError("Failed to get existing event", "error", err.Error())
+			}
+
+			if existing != nil {
+				// Update existing event: replace fields, aggregate links
+				existing.Title = payload.Title
+				existing.Message = payload.Message
+				existing.EventType = eventType
+				existing.Source = payload.Source
+				existing.Timestamp = time.Now().UnixMilli()
+				existing.Links = mergeLinks(existing.Links, incomingLinks)
+
+				if err := p.store.UpdateEvent(teamID, *existing); err != nil {
+					p.API.LogError("Failed to update event", "error", err.Error())
+					http.Error(w, "Failed to update event", http.StatusInternalServerError)
+					return
+				}
+
+				eventJSON, err := json.Marshal(existing)
+				if err != nil {
+					p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
+					http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
+					return
+				}
+
+				p.API.PublishWebSocketEvent("updated_event", map[string]interface{}{
+					"event": string(eventJSON),
+				}, &model.WebsocketBroadcast{
+					TeamId: teamID,
+				})
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(eventJSON)
+				return
+			}
+		}
+	}
+
+	// New event
 	event := Event{
-		ID:        uuid.New().String(),
-		TeamID:    teamID,
-		Timestamp: time.Now().UnixMilli(),
-		Title:     payload.Title,
-		Message:   payload.Message,
-		Link:      payload.Link,
-		EventType: eventType,
-		Source:    payload.Source,
+		ID:         uuid.New().String(),
+		TeamID:     teamID,
+		Timestamp:  time.Now().UnixMilli(),
+		Title:      payload.Title,
+		Message:    payload.Message,
+		Links:      incomingLinks,
+		EventType:  eventType,
+		Source:     payload.Source,
+		ExternalID: payload.ExternalID,
 	}
 
 	if err := p.store.AddEvent(teamID, event); err != nil {
