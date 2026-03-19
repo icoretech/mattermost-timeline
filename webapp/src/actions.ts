@@ -19,6 +19,7 @@ export interface EventFeedAction {
   eventId?: string;
   loading?: boolean;
   error?: string | null;
+  timelineOrder?: string;
   [key: string]: unknown;
 }
 
@@ -44,6 +45,7 @@ export function fetchEvents(
         events: data.events || [],
         total: data.total || 0,
         append: offset > 0,
+        timelineOrder: data.timeline_order || "oldest_first",
       });
     } catch (error) {
       const message =

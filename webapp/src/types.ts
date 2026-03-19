@@ -15,6 +15,7 @@ export interface EventFeedState {
   error: string | null;
   total: number;
   newEventIds: string[];
+  timelineOrder: "oldest_first" | "newest_first";
 }
 
 export interface NewEventWebSocketMessage {

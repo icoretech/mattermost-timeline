@@ -76,10 +76,23 @@ function error(
   }
 }
 
+function timelineOrder(
+  state: "oldest_first" | "newest_first" = "oldest_first",
+  action: EventFeedAction,
+): "oldest_first" | "newest_first" {
+  switch (action.type) {
+    case RECEIVED_EVENTS:
+      return (action.timelineOrder as "oldest_first" | "newest_first") || state;
+    default:
+      return state;
+  }
+}
+
 export default combineReducers({
   events,
   isLoading,
   error,
   total,
   newEventIds,
+  timelineOrder,
 });

@@ -284,6 +284,33 @@ func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	assert.Len(t, resp.Events, 1)
 	assert.Equal(t, 1, resp.Total)
 	assert.Equal(t, "evt-1", resp.Events[0].ID)
+	assert.Equal(t, "oldest_first", resp.TimelineOrder)
+	api.AssertExpectations(t)
+}
+
+func TestHandleGetEvents_TimelineOrder(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		MaxEventsStored:    "100",
+		MaxEventsDisplayed: "50",
+		TimelineOrder:      "newest_first",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp EventsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "newest_first", resp.TimelineOrder)
 	api.AssertExpectations(t)
 }
 

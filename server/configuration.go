@@ -9,6 +9,14 @@ type configuration struct {
 	WebhookSecret      string `json:"WebhookSecret"`
 	MaxEventsStored    string `json:"MaxEventsStored"`
 	MaxEventsDisplayed string `json:"MaxEventsDisplayed"`
+	TimelineOrder      string `json:"TimelineOrder"`
+}
+
+func (c *configuration) timelineOrder() string {
+	if c.TimelineOrder == "newest_first" || c.TimelineOrder == "oldest_first" {
+		return c.TimelineOrder
+	}
+	return "oldest_first"
 }
 
 func (c *configuration) Clone() *configuration {

@@ -28,10 +28,17 @@ const RHSView: React.FC = () => {
     error = null,
     newEventIds = [],
     total = 0,
+    timelineOrder = "oldest_first",
   } = pluginState || {};
 
-  // Reversed: oldest first, newest at bottom
-  const reversedEvents = useMemo(() => [...events].reverse(), [events]);
+  const isOldestFirst = timelineOrder === "oldest_first";
+
+  // oldest_first: reverse store order (store has newest first) so oldest is at top
+  // newest_first: use store order as-is (newest at top)
+  const displayEvents = useMemo(
+    () => (isOldestFirst ? [...events].reverse() : events),
+    [events, isOldestFirst],
+  );
 
   useEffect(() => {
     if (currentTeamId) {
@@ -39,19 +46,20 @@ const RHSView: React.FC = () => {
     }
   }, [dispatch, currentTeamId]);
 
-  // Auto-scroll to bottom when new events arrive
+  // Auto-scroll to bottom when new events arrive (only in oldest_first mode)
   useEffect(() => {
-    if (listRef.current && newEventIds.length > 0) {
+    if (isOldestFirst && listRef.current && newEventIds.length > 0) {
       listRef.current.scrollTo({
         top: listRef.current.scrollHeight,
         behavior: "smooth",
       });
     }
-  }, [newEventIds.length]);
+  }, [newEventIds.length, isOldestFirst]);
 
-  // Scroll to bottom on initial load only
+  // Scroll to bottom on initial load (only in oldest_first mode)
   useEffect(() => {
     if (
+      isOldestFirst &&
       listRef.current &&
       events.length > 0 &&
       !isLoading &&
@@ -60,7 +68,7 @@ const RHSView: React.FC = () => {
       initialLoadDone.current = true;
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [isLoading, events.length]);
+  }, [isLoading, events.length, isOldestFirst]);
 
   const handleAnimationEnd = useCallback(
     (eventId: string) => {
@@ -75,18 +83,20 @@ const RHSView: React.FC = () => {
     }
   }, [dispatch, currentTeamId, events.length, total]);
 
+  const loadMoreButton = !isLoading && events.length < total && (
+    <button
+      type="button"
+      className="event-feed-load-more"
+      onClick={handleLoadMore}
+    >
+      {"Load older events"}
+    </button>
+  );
+
   return (
     <div className="event-feed-timeline">
       <div className="event-feed-list" ref={listRef}>
-        {!isLoading && events.length < total && (
-          <button
-            type="button"
-            className="event-feed-load-more"
-            onClick={handleLoadMore}
-          >
-            {"Load older events"}
-          </button>
-        )}
+        {isOldestFirst && loadMoreButton}
         {isLoading && (
           <div className="event-feed-loading">
             <div className="event-feed-loading__spinner" />
@@ -98,7 +108,7 @@ const RHSView: React.FC = () => {
             <span>{error}</span>
           </div>
         )}
-        {reversedEvents.map((event: EventEntry) => (
+        {displayEvents.map((event: EventEntry) => (
           <TimelineEntry
             key={event.id}
             event={event}
@@ -106,6 +116,7 @@ const RHSView: React.FC = () => {
             onAnimationEnd={handleAnimationEnd}
           />
         ))}
+        {!isOldestFirst && loadMoreButton}
         {!isLoading && events.length === 0 && (
           <div className="event-feed-empty">
             <span className="event-feed-empty__icon">{"📡"}</span>

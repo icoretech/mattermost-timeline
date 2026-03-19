@@ -45,6 +45,23 @@
                 "type": "text",
                 "help_text": "Maximum number of events shown in the timeline at once. Default: 100.",
                 "default": "100"
+            },
+            {
+                "key": "TimelineOrder",
+                "display_name": "Timeline Order",
+                "type": "dropdown",
+                "help_text": "Controls the display order of events in the timeline. \"Oldest first\" shows newest events at the bottom; \"Newest first\" shows newest events at the top.",
+                "default": "oldest_first",
+                "options": [
+                    {
+                        "display_name": "Oldest first (newest at bottom)",
+                        "value": "oldest_first"
+                    },
+                    {
+                        "display_name": "Newest first (newest at top)",
+                        "value": "newest_first"
+                    }
+                ]
             }
         ]
     }

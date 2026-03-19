@@ -154,8 +154,9 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := EventsResponse{
-		Events: events,
-		Total:  total,
+		Events:        events,
+		Total:         total,
+		TimelineOrder: config.timelineOrder(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
