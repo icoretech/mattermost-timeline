@@ -21,15 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
       - uses: actions/setup-node@v6
         with:
           node-version: 24.14.0
           cache: npm
           cache-dependency-path: webapp/package-lock.json
-      - run: make apply
+      - name: Generate webapp manifest
+        run: node -e "const m=require('./plugin.json');m.version=m.version||'0.0.0';require('fs').writeFileSync('webapp/src/manifest.ts','const manifest=JSON.parse(\`\n'+JSON.stringify(m,null,4)+'\n\`);\nexport default manifest;\n')"
       - run: cd webapp && npm ci
       - run: cd webapp && npx tsc --noEmit
       - run: cd webapp && npx biome check .
