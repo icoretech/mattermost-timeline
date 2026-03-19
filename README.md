@@ -39,7 +39,7 @@ After enabling the plugin, configure it in **System Console > Plugins > Mattermo
 Send events to the plugin via HTTP POST:
 
 ```bash
-curl -X POST https://your-mattermost.example.com/plugins/ch.icoretech.mattermost-timeline/webhook?team_id=TEAM_ID \
+curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-timeline/webhook?team_id=TEAM_ID \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Secret: YOUR_SECRET" \
   -d '{

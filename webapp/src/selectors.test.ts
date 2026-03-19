@@ -12,7 +12,7 @@ describe("selectors", () => {
         newEventIds: [],
       };
       const state = {
-        "plugins-ch.icoretech.mattermost-timeline": pluginState,
+        "plugins-ch.icorete.mattermost-timeline": pluginState,
       } as unknown as GlobalState;
       expect(getPluginState(state)).toBe(pluginState);
     });

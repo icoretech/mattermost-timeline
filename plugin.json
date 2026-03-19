@@ -1,5 +1,5 @@
 {
-    "id": "ch.icoretech.mattermost-timeline",
+    "id": "ch.icorete.mattermost-timeline",
     "name": "Mattermost Timeline",
     "description": "Real-time animated timeline of events from external webhooks, displayed in the right-hand sidebar.",
     "homepage_url": "https://github.com/icoretech/mattermost-timeline",
