@@ -32,12 +32,25 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v6
         with:
-          node-version: 24.14.0
+          node-version: 24
           cache: npm
           cache-dependency-path: webapp/package-lock.json
       - run: cd webapp && npm ci
       - run: make dist
-      - name: Upload release artifact
+
+      - name: Import GPG key
+        run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Sign plugin bundle
+        run: |
+          for f in dist/*.tar.gz; do
+            gpg --batch --yes \
+                --pinentry-mode loopback \
+                --personal-digest-preferences SHA256 \
+                --detach-sign "$f"
+          done
+
+      - name: Upload release artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/*.tar.gz
+        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/*.tar.gz dist/*.tar.gz.sig
