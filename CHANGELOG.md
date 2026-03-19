@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.3](https://github.com/icoretech/mattermost-timeline/compare/v0.1.2...v0.1.3) (2026-03-19)
+
+
+### Features
+
+* add GPG signing to release workflow ([f44514f](https://github.com/icoretech/mattermost-timeline/commit/f44514fb047d83dd1e33cc7482d44a4686b4ad0e))
+* initial release ([e21e34c](https://github.com/icoretech/mattermost-timeline/commit/e21e34c7827eac6dd617ebac7b7fadf685f4ff69))
+* marketplace readiness ([b1b72c3](https://github.com/icoretech/mattermost-timeline/commit/b1b72c341109e8ec5f7ab236db610de67a90b695))
+
 ## [0.1.2](https://github.com/icoretech/mattermost-timeline/compare/v0.1.1...v0.1.2) (2026-03-19)
 
 
