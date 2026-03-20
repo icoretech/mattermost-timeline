@@ -307,31 +307,68 @@
   align-items: center;
   margin-top: 8px;
 
-  &__add-wrapper {
-    position: relative;
-  }
-
-  &__add-btn {
-    display: inline-flex;
+  &__toggle {
+    display: flex;
     align-items: center;
     justify-content: center;
     width: 26px;
     height: 26px;
-    border-radius: 13px;
-    border: 1px dashed rgba(var(--center-channel-color-rgb), 0.16);
+    border-radius: 50%;
+    border: 1px solid rgba(var(--center-channel-color-rgb), 0.08);
     background: transparent;
-    color: rgba(var(--center-channel-color-rgb), 0.48);
+    color: rgba(var(--center-channel-color-rgb), 0.4);
     cursor: pointer;
     transition: all 0.15s;
     padding: 0;
+    flex-shrink: 0;
 
     &:hover {
       background: rgba(var(--button-bg-rgb), 0.08);
+      color: rgba(var(--button-bg-rgb), 1);
       border-color: rgba(var(--button-bg-rgb), 0.24);
-      border-style: solid;
+    }
+
+    &--active {
+      background: rgba(var(--button-bg-rgb), 0.12);
+      color: rgba(var(--button-bg-rgb), 1);
+      border-color: rgba(var(--button-bg-rgb), 0.32);
+    }
+  }
+
+  &__tray {
+    display: flex;
+    gap: 1px;
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    transition: max-width 0.25s ease, opacity 0.2s ease;
+
+    &--open {
+      max-width: 280px;
+      opacity: 1;
+    }
+  }
+
+  &__tray-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: rgba(var(--center-channel-color-rgb), 0.56);
+    cursor: pointer;
+    transition: all 0.12s;
+    padding: 0;
+
+    &:hover {
+      background: rgba(var(--button-bg-rgb), 0.12);
       color: rgba(var(--button-bg-rgb), 1);
     }
   }
+
 }
 
 .reaction-pill {
@@ -398,36 +435,3 @@
   }
 }
 
-.reaction-picker {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  display: flex;
-  gap: 2px;
-  padding: 6px 8px;
-  background: rgba(var(--center-channel-bg-rgb), 1);
-  border: 1px solid rgba(var(--center-channel-color-rgb), 0.12);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 10;
-
-  &__btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: rgba(var(--center-channel-color-rgb), 0.56);
-    cursor: pointer;
-    transition: all 0.12s;
-    padding: 0;
-
-    &:hover {
-      background: rgba(var(--button-bg-rgb), 0.12);
-      color: rgba(var(--button-bg-rgb), 1);
-    }
-  }
-}
