@@ -63,6 +63,13 @@
                     }
                 ]
             }
+        ,{
+            "key": "EnableReactions",
+            "display_name": "Enable Reactions",
+            "type": "bool",
+            "help_text": "Allow users to react to timeline events with icon-based reactions.",
+            "default": true
+        }
         ]
     }
 }

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
@@ -42,6 +45,8 @@ func TestHandleWebhook_ValidRequest(t *testing.T) {
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1:_global", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
@@ -78,6 +83,8 @@ func TestHandleWebhook_TeamIDFromQueryParam(t *testing.T) {
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-q:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-q:_global", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("KVGet", "event_index:team-q").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", "event_index:team-q", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
@@ -204,6 +211,8 @@ func TestHandleWebhook_DefaultEventType(t *testing.T) {
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1:_global", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
@@ -501,6 +510,8 @@ func TestHandleWebhook_WithLinks(t *testing.T) {
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1:_global", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
@@ -533,6 +544,8 @@ func TestHandleWebhook_LegacyLinkNormalized(t *testing.T) {
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1:_global", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
@@ -570,6 +583,9 @@ func TestHandleWebhook_ExternalID_NewEvent(t *testing.T) {
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	// Store external ID mapping
 	api.On("KVSet", "ext_id:team-1:build-123", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	// Global index (no channels on event)
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team-1:_global", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", "event_index:team-1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
@@ -655,4 +671,183 @@ func TestMergeLinks_DeduplicatesByURL(t *testing.T) {
 	assert.Equal(t, "https://a.com", result[0].URL)
 	assert.Equal(t, "https://b.com", result[1].URL)
 	assert.Equal(t, "https://c.com", result[2].URL)
+}
+
+// --- Reaction endpoint tests ---
+
+func TestHandleAddReaction(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", EnableReactions: true}
+	p := newTestPlugin(t, api, cfg)
+
+	event := Event{
+		ID: "evt-1", TeamID: "team1", Title: "Test", EventType: "info",
+		Timestamp: time.Now().UnixMilli(),
+	}
+	eventJSON, _ := json.Marshal(event)
+
+	api.On("KVGet", "event:evt-1").Return(eventJSON, (*model.AppError)(nil))
+	api.On("GetTeamMember", "team1", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event:evt-1", eventJSON, mock.Anything).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "reaction_updated", mock.Anything, mock.Anything).Return()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/events/evt-1/reactions/eyes", nil)
+	req.Header.Set("Mattermost-User-ID", "user1")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	api.AssertExpectations(t)
+}
+
+func TestHandleRemoveReaction(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", EnableReactions: true}
+	p := newTestPlugin(t, api, cfg)
+
+	event := Event{
+		ID: "evt-1", TeamID: "team1", Title: "Test", EventType: "info",
+		Timestamp: time.Now().UnixMilli(),
+		Reactions: EventReactions{
+			"eyes": ReactionSummary{Count: 1, UserIDs: []string{"user1"}},
+		},
+	}
+	eventJSON, _ := json.Marshal(event)
+
+	api.On("KVGet", "event:evt-1").Return(eventJSON, (*model.AppError)(nil))
+	api.On("GetTeamMember", "team1", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event:evt-1", eventJSON, mock.Anything).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "reaction_updated", mock.Anything, mock.Anything).Return()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/events/evt-1/reactions/eyes", nil)
+	req.Header.Set("Mattermost-User-ID", "user1")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	api.AssertExpectations(t)
+}
+
+func TestHandleGetReactionUsers(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", EnableReactions: true}
+	p := newTestPlugin(t, api, cfg)
+
+	event := Event{
+		ID: "evt-1", TeamID: "team1", Title: "Test", EventType: "info",
+		Timestamp: time.Now().UnixMilli(),
+		Reactions: EventReactions{
+			"eyes": ReactionSummary{Count: 2, UserIDs: []string{"user1", "user2"}},
+		},
+	}
+	eventJSON, _ := json.Marshal(event)
+
+	api.On("KVGet", "event:evt-1").Return(eventJSON, (*model.AppError)(nil))
+	api.On("GetTeamMember", "team1", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/evt-1/reactions/eyes", nil)
+	req.Header.Set("Mattermost-User-ID", "user1")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string][]string
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, []string{"user1", "user2"}, resp["user_ids"])
+	api.AssertExpectations(t)
+}
+
+func TestHandleAddReaction_Disabled(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", EnableReactions: false}
+	p := newTestPlugin(t, api, cfg)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/events/evt-1/reactions/eyes", nil)
+	req.Header.Set("Mattermost-User-ID", "user1")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+}
+
+func TestHandleAddReaction_InvalidIcon(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", EnableReactions: true}
+	p := newTestPlugin(t, api, cfg)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/events/evt-1/reactions/poop", nil)
+	req.Header.Set("Mattermost-User-ID", "user1")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+// --- Channel scoping tests ---
+
+func TestHandleWebhook_WithChannels(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetChannel", "ch1").Return(&model.Channel{Id: "ch1", TeamId: "team1", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool { return strings.HasPrefix(key, "event:") }), mock.Anything).Return((*model.AppError)(nil))
+	// Channel index for ch1
+	api.On("KVGet", "event_index:team1:ch1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team1:ch1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	// Main team index
+	api.On("KVGet", "event_index:team1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVSet", "event_index:team1", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	// Channel-scoped WebSocket broadcast
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
+		return b.ChannelId == "ch1"
+	})).Return()
+
+	body := `{"title":"Deploy","event_type":"deploy","team_id":"team1","channels":["ch1"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsDMChannel(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetChannel", "dm1").Return(&model.Channel{Id: "dm1", TeamId: "team1", Type: model.ChannelTypeDirect}, (*model.AppError)(nil))
+
+	body := `{"title":"Test","event_type":"info","team_id":"team1","channels":["dm1"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DM/GM")
+}
+
+func TestHandleWebhook_TooManyChannels(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret"}
+	p := newTestPlugin(t, api, cfg)
+
+	channels := make([]string, 11)
+	for i := range channels {
+		channels[i] = fmt.Sprintf("ch%d", i)
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"title": "Test", "event_type": "info", "team_id": "team1", "channels": channels,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }

@@ -11,6 +11,10 @@ export const CLEAR_NEW_EVENT_FLAG = `${manifest.id}_clear_new_event_flag`;
 export const CLEAR_UPDATED_EVENT_FLAG = `${manifest.id}_clear_updated_event_flag`;
 export const SET_LOADING = `${manifest.id}_set_loading`;
 export const SET_ERROR = `${manifest.id}_set_error`;
+export const RECEIVED_REACTION_UPDATED = `${manifest.id}_received_reaction_updated`;
+export const OPTIMISTIC_REACTION = `${manifest.id}_optimistic_reaction`;
+export const CLEAR_EVENTS = `${manifest.id}_clear_events`;
+export const SET_CURRENT_USER_ID = `${manifest.id}_set_current_user_id`;
 
 export interface EventFeedAction {
   type: string;
@@ -22,6 +26,13 @@ export interface EventFeedAction {
   loading?: boolean;
   error?: string | null;
   timelineOrder?: string;
+  enableReactions?: boolean;
+  currentUserId?: string;
+  event_id?: string;
+  icon?: string;
+  count?: number;
+  user_ids?: string[];
+  optimisticAction?: "add" | "remove";
   [key: string]: unknown;
 }
 
@@ -29,11 +40,15 @@ export function fetchEvents(
   teamId: string,
   offset = 0,
   limit = 50,
+  channelId?: string,
 ): (dispatch: Dispatch<EventFeedAction>) => Promise<void> {
   return async (dispatch: Dispatch<EventFeedAction>) => {
     dispatch({ type: SET_LOADING, loading: true });
     try {
-      const url = `/plugins/${manifest.id}/api/v1/events?team_id=${encodeURIComponent(teamId)}&offset=${offset}&limit=${limit}`;
+      let url = `/plugins/${manifest.id}/api/v1/events?team_id=${encodeURIComponent(teamId)}&offset=${offset}&limit=${limit}`;
+      if (channelId) {
+        url += `&channel_id=${encodeURIComponent(channelId)}`;
+      }
       const response = await fetch(url, {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
@@ -48,6 +63,7 @@ export function fetchEvents(
         total: data.total || 0,
         append: offset > 0,
         timelineOrder: data.timeline_order || "oldest_first",
+        enableReactions: data.enable_reactions,
       });
     } catch (error) {
       const message =
@@ -98,4 +114,96 @@ export function clearNewEventFlag(eventId: string): EventFeedAction {
 
 export function clearUpdatedEventFlag(eventId: string): EventFeedAction {
   return { type: CLEAR_UPDATED_EVENT_FLAG, eventId };
+}
+
+export function addReaction(eventId: string, icon: string) {
+  return async (dispatch: any) => {
+    dispatch({
+      type: OPTIMISTIC_REACTION,
+      event_id: eventId,
+      icon,
+      optimisticAction: "add",
+    });
+    try {
+      const resp = await fetch(
+        `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
+        { method: "PUT", headers: { "X-Requested-With": "XMLHttpRequest" } },
+      );
+      if (!resp.ok) throw new Error("Failed to add reaction");
+      return resp.json();
+    } catch (err) {
+      dispatch({
+        type: OPTIMISTIC_REACTION,
+        event_id: eventId,
+        icon,
+        optimisticAction: "remove",
+      });
+      throw err;
+    }
+  };
+}
+
+export function removeReaction(eventId: string, icon: string) {
+  return async (dispatch: any) => {
+    dispatch({
+      type: OPTIMISTIC_REACTION,
+      event_id: eventId,
+      icon,
+      optimisticAction: "remove",
+    });
+    try {
+      const resp = await fetch(
+        `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
+        { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } },
+      );
+      if (!resp.ok) throw new Error("Failed to remove reaction");
+      return resp.json();
+    } catch (err) {
+      dispatch({
+        type: OPTIMISTIC_REACTION,
+        event_id: eventId,
+        icon,
+        optimisticAction: "add",
+      });
+      throw err;
+    }
+  };
+}
+
+export function fetchReactionUsers(
+  eventId: string,
+  icon: string,
+): Promise<string[]> {
+  return fetch(
+    `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
+    { headers: { "X-Requested-With": "XMLHttpRequest" } },
+  )
+    .then((r) => r.json())
+    .then((data) => data.user_ids || []);
+}
+
+export function receivedReactionUpdated(payload: {
+  event_id: string;
+  icon: string;
+  count: number;
+  user_ids: string[];
+}) {
+  return { type: RECEIVED_REACTION_UPDATED, ...payload };
+}
+
+export function parseReactionWebSocket(msg: any) {
+  try {
+    const payload = JSON.parse(msg.data.payload);
+    return receivedReactionUpdated(payload);
+  } catch {
+    return null;
+  }
+}
+
+export function clearEvents() {
+  return { type: CLEAR_EVENTS };
+}
+
+export function setCurrentUserId(userId: string) {
+  return { type: SET_CURRENT_USER_ID, currentUserId: userId };
 }

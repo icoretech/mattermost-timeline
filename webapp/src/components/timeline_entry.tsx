@@ -20,8 +20,8 @@ import {
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
-
 import type { EventEntry, EventLink } from "../types";
+import ReactionBar from "./reaction_bar";
 
 interface Props {
   event: EventEntry;
@@ -29,6 +29,11 @@ interface Props {
   isUpdated: boolean;
   onAnimationEnd: (eventId: string) => void;
   onUpdateAnimationEnd: (eventId: string) => void;
+  enableReactions: boolean;
+  onAddReaction: (eventId: string, icon: string) => void;
+  onRemoveReaction: (eventId: string, icon: string) => void;
+  onFetchReactionUsers: (eventId: string, icon: string) => Promise<string[]>;
+  getUser: (userId: string) => any;
 }
 
 const ICON_SIZE = 18;
@@ -153,6 +158,11 @@ const TimelineEntry: React.FC<Props> = ({
   isUpdated,
   onAnimationEnd,
   onUpdateAnimationEnd,
+  enableReactions,
+  onAddReaction,
+  onRemoveReaction,
+  onFetchReactionUsers,
+  getUser,
 }) => {
   const config =
     EVENT_TYPE_CONFIG[event.event_type] || EVENT_TYPE_CONFIG.generic;
@@ -240,6 +250,15 @@ const TimelineEntry: React.FC<Props> = ({
               </a>
             ))}
           </div>
+        )}
+        {enableReactions && (
+          <ReactionBar
+            reactions={event.client_reactions}
+            onAddReaction={(icon) => onAddReaction(event.id, icon)}
+            onRemoveReaction={(icon) => onRemoveReaction(event.id, icon)}
+            onFetchUsers={(icon) => onFetchReactionUsers(event.id, icon)}
+            getUser={getUser}
+          />
         )}
       </div>
     </div>

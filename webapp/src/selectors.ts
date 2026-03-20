@@ -14,3 +14,7 @@ export function getPluginState(state: GlobalState): EventFeedState | undefined {
 export function getCurrentTeamId(state: GlobalState): string {
   return state.entities.teams.currentTeamId || "";
 }
+
+export const getCurrentChannelId = (state: any): string => {
+  return state?.entities?.channels?.currentChannelId || "";
+};

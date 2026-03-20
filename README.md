@@ -26,6 +26,8 @@ External services push events via HTTP webhooks. New entries animate into the ti
 - Event type icons (deploy, alert, error, host_online, host_offline, etc.)
 - Team-scoped events with per-team KV store persistence
 - Paginated event history with "Load older events" support
+- Channel-scoped timelines — events can target specific channels
+- Icon-based reactions with avatar display (eyes, wrench, check, megaphone, thumbs-up, hand, party, heart)
 - Webhook authentication via shared secret
 
 ## Requirements
@@ -66,6 +68,7 @@ After enabling the plugin, configure it in **System Console > Plugins > Mattermo
 | Max Events Stored | Maximum events to persist per team | 500 |
 | Max Events Displayed | Maximum events shown in the timeline | 100 |
 | Timeline Order | Display order: "Oldest first" (newest at bottom) or "Newest first" (newest at top) | Oldest first |
+| Enable Reactions | Allow users to react to timeline events with icon-based reactions | `true` |
 
 ## Webhook API
 
@@ -87,6 +90,21 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
   }'
 ```
 
+#### Channel-Scoped Event
+
+```bash
+curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-timeline/webhook?team_id=TEAM_ID \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Secret: YOUR_SECRET" \
+  -d '{
+    "title": "Deployed v3.0.0 to staging",
+    "message": "All tests passed. Ready for review.",
+    "event_type": "deploy",
+    "source": "ci/cd",
+    "channels": ["CHANNEL_ID_1", "CHANNEL_ID_2"]
+  }'
+```
+
 ### Webhook Payload
 
 | Field | Type | Required | Description |
@@ -98,6 +116,8 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
 | `event_type` | string | no | One of: `host_online`, `host_offline`, `deploy`, `alert`, `error`, `info`, `success`, `money_in`, `money_out`, `security`, `incident`, `user_joined`, `user_left`, `scheduled`, `review`, `message`, `generic` |
 | `source` | string | no | Source system label (e.g., "monitoring", "ci/cd") |
 | `external_id` | string | no | Idempotency key. Subsequent webhooks with the same `external_id` update the existing event (fields are replaced, links are aggregated) |
+| `team_id` | string | no | Team ID (can also be passed as `?team_id=` query param) |
+| `channels` | array | no | Array of channel IDs (max 10). When set, the event appears only in those channels' timelines. Without this field, events are team-wide. |
 
 ## Development
 

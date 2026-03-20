@@ -2,7 +2,12 @@ import type { GlobalState } from "@mattermost/types/store";
 import React from "react";
 import type { Store } from "redux";
 import type { PluginRegistry } from "types/mattermost-webapp";
-import { parseNewEventWebSocket, parseUpdatedEventWebSocket } from "./actions";
+import {
+  parseNewEventWebSocket,
+  parseReactionWebSocket,
+  parseUpdatedEventWebSocket,
+  setCurrentUserId,
+} from "./actions";
 import Icon from "./components/icon";
 import RHSView from "./components/rhs_view";
 import manifest from "./manifest";
@@ -12,6 +17,12 @@ import type { NewEventWebSocketMessage } from "./types";
 export default class Plugin {
   public initialize(registry: PluginRegistry, store: Store<GlobalState>) {
     registry.registerReducer(reducer);
+
+    const currentUserId =
+      (store.getState() as any)?.entities?.users?.currentUserId || "";
+    if (currentUserId) {
+      store.dispatch(setCurrentUserId(currentUserId) as any);
+    }
 
     const { toggleRHSPlugin } = registry.registerRightHandSidebarComponent(
       RHSView,
@@ -41,6 +52,18 @@ export default class Plugin {
         const action = parseUpdatedEventWebSocket(message.data.event);
         if (action) {
           store.dispatch(action);
+        }
+      },
+    );
+
+    registry.registerWebSocketEventHandler(
+      `custom_${manifest.id}_reaction_updated`,
+      (msg: any) => {
+        const action = parseReactionWebSocket(msg);
+        if (action) {
+          const state = store.getState() as any;
+          const userId = state?.entities?.users?.currentUserId || "";
+          store.dispatch({ ...action, currentUserId: userId } as any);
         }
       },
     );

@@ -1,13 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch, useSelector, useStore } from "react-redux";
 import type { Dispatch } from "redux";
 
 import {
+  addReaction,
+  clearEvents,
   clearNewEventFlag,
   clearUpdatedEventFlag,
   fetchEvents,
+  fetchReactionUsers,
+  removeReaction,
 } from "../actions";
-import { getCurrentTeamId, getPluginState } from "../selectors";
+import {
+  getCurrentChannelId,
+  getCurrentTeamId,
+  getPluginState,
+} from "../selectors";
 import type { EventEntry } from "../types";
 
 import TimelineEntry from "./timeline_entry";
@@ -23,7 +31,9 @@ const RHSView: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const initialLoadDone = useRef(false);
 
+  const store = useStore();
   const currentTeamId = useSelector(getCurrentTeamId);
+  const currentChannelId = useSelector(getCurrentChannelId);
   const pluginState = useSelector(getPluginState);
 
   const {
@@ -34,6 +44,7 @@ const RHSView: React.FC = () => {
     updatedEventIds = [],
     total = 0,
     timelineOrder = "oldest_first",
+    enableReactions = true,
   } = pluginState || {};
 
   const isOldestFirst = timelineOrder === "oldest_first";
@@ -47,9 +58,12 @@ const RHSView: React.FC = () => {
 
   useEffect(() => {
     if (currentTeamId) {
-      dispatch(fetchEvents(currentTeamId));
+      dispatch(clearEvents());
+      dispatch(
+        fetchEvents(currentTeamId, 0, 50, currentChannelId || undefined),
+      );
     }
-  }, [dispatch, currentTeamId]);
+  }, [dispatch, currentTeamId, currentChannelId]);
 
   // Auto-scroll to bottom when new events arrive (only in oldest_first mode)
   useEffect(() => {
@@ -91,9 +105,45 @@ const RHSView: React.FC = () => {
 
   const handleLoadMore = useCallback(() => {
     if (currentTeamId && events.length < total) {
-      dispatch(fetchEvents(currentTeamId, events.length));
+      dispatch(
+        fetchEvents(
+          currentTeamId,
+          events.length,
+          50,
+          currentChannelId || undefined,
+        ),
+      );
     }
-  }, [dispatch, currentTeamId, events.length, total]);
+  }, [dispatch, currentTeamId, currentChannelId, events.length, total]);
+
+  const getUser = useCallback(
+    (userId: string) => {
+      const state = store.getState() as any;
+      return state?.entities?.users?.profiles?.[userId];
+    },
+    [store],
+  );
+
+  const handleAddReaction = useCallback(
+    (eventId: string, icon: string) => {
+      dispatch(addReaction(eventId, icon) as any);
+    },
+    [dispatch],
+  );
+
+  const handleRemoveReaction = useCallback(
+    (eventId: string, icon: string) => {
+      dispatch(removeReaction(eventId, icon) as any);
+    },
+    [dispatch],
+  );
+
+  const handleFetchReactionUsers = useCallback(
+    (eventId: string, icon: string): Promise<string[]> => {
+      return fetchReactionUsers(eventId, icon);
+    },
+    [],
+  );
 
   const loadMoreButton = !isLoading && events.length < total && (
     <button
@@ -128,6 +178,11 @@ const RHSView: React.FC = () => {
             isUpdated={updatedEventIds.includes(event.id)}
             onAnimationEnd={handleAnimationEnd}
             onUpdateAnimationEnd={handleUpdateAnimationEnd}
+            enableReactions={enableReactions}
+            onAddReaction={handleAddReaction}
+            onRemoveReaction={handleRemoveReaction}
+            onFetchReactionUsers={handleFetchReactionUsers}
+            getUser={getUser}
           />
         ))}
         {!isOldestFirst && loadMoreButton}

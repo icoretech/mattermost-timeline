@@ -10,6 +10,7 @@ type configuration struct {
 	MaxEventsStored    string `json:"MaxEventsStored"`
 	MaxEventsDisplayed string `json:"MaxEventsDisplayed"`
 	TimelineOrder      string `json:"TimelineOrder"`
+	EnableReactions    bool   `json:"EnableReactions"`
 }
 
 func (c *configuration) timelineOrder() string {
@@ -17,6 +18,10 @@ func (c *configuration) timelineOrder() string {
 		return c.TimelineOrder
 	}
 	return "oldest_first"
+}
+
+func (c *configuration) enableReactions() bool {
+	return c.EnableReactions
 }
 
 func (c *configuration) Clone() *configuration {

@@ -25,5 +25,9 @@ webapp/node_modules/
 # Dev
 dev/
 
+# Docs (internal plans/specs)
+docs/
+
 # Misc
 AGENTS.md
+.superpowers/

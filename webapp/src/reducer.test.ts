@@ -1,6 +1,8 @@
 import type { EventFeedAction } from "./actions";
 import {
+  CLEAR_EVENTS,
   CLEAR_NEW_EVENT_FLAG,
+  OPTIMISTIC_REACTION,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
   SET_ERROR,
@@ -34,6 +36,8 @@ describe("reducer", () => {
       newEventIds: [],
       updatedEventIds: [],
       timelineOrder: "oldest_first",
+      enableReactions: true,
+      currentUserId: "",
     });
   });
 
@@ -168,6 +172,67 @@ describe("reducer", () => {
         append: false,
       });
       expect(state.error).toBeNull();
+    });
+  });
+
+  describe("CLEAR_EVENTS", () => {
+    it("resets events, total, and error", () => {
+      const stateWithEvents = reducer(undefined, {
+        type: RECEIVED_EVENTS,
+        events: [makeEvent({ id: "1" })],
+        total: 1,
+        timelineOrder: "oldest_first",
+        enableReactions: true,
+      } as EventFeedAction);
+      const cleared = reducer(stateWithEvents, {
+        type: CLEAR_EVENTS,
+      } as unknown as EventFeedAction);
+      expect(cleared.events).toEqual([]);
+      expect(cleared.total).toBe(0);
+      expect(cleared.error).toBeNull();
+    });
+  });
+
+  describe("OPTIMISTIC_REACTION", () => {
+    it("optimistically adds a reaction", () => {
+      const stateWithEvent = reducer(undefined, {
+        type: RECEIVED_EVENTS,
+        events: [makeEvent({ id: "e1" })],
+        total: 1,
+        append: false,
+      } as EventFeedAction);
+      const state = reducer(stateWithEvent, {
+        type: OPTIMISTIC_REACTION,
+        event_id: "e1",
+        icon: "eyes",
+        optimisticAction: "add",
+      } as unknown as EventFeedAction);
+      expect(state.events[0].client_reactions?.eyes?.count).toBe(1);
+      expect(state.events[0].client_reactions?.eyes?.self).toBe(true);
+    });
+
+    it("optimistically removes a reaction", () => {
+      const stateWithEvent = reducer(undefined, {
+        type: RECEIVED_EVENTS,
+        events: [
+          {
+            ...makeEvent({ id: "e1" }),
+            client_reactions: {
+              eyes: { count: 2, self: true, recent_users: ["u1", "u2"] },
+            },
+          },
+        ],
+        total: 1,
+        append: false,
+      } as EventFeedAction);
+      const state = reducer(stateWithEvent, {
+        type: OPTIMISTIC_REACTION,
+        event_id: "e1",
+        icon: "eyes",
+        optimisticAction: "remove",
+      } as unknown as EventFeedAction);
+      expect(state.events[0].client_reactions?.eyes?.count).toBe(1);
+      expect(state.events[0].client_reactions?.eyes?.self).toBe(false);
     });
   });
 });

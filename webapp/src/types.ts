@@ -3,6 +3,12 @@ export interface EventLink {
   label?: string;
 }
 
+export interface ReactionClientSummary {
+  count: number;
+  self: boolean;
+  recent_users: string[];
+}
+
 export interface EventEntry {
   id: string;
   team_id: string;
@@ -14,6 +20,8 @@ export interface EventEntry {
   event_type: string;
   source?: string;
   external_id?: string;
+  client_reactions?: Record<string, ReactionClientSummary>;
+  channels?: string[];
 }
 
 export interface EventFeedState {
@@ -24,6 +32,8 @@ export interface EventFeedState {
   newEventIds: string[];
   updatedEventIds: string[];
   timelineOrder: "oldest_first" | "newest_first";
+  enableReactions: boolean;
+  currentUserId: string;
 }
 
 export interface NewEventWebSocketMessage {
