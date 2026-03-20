@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.0](https://github.com/icoretech/mattermost-timeline/compare/v1.1.0...v1.2.0) (2026-03-20)
+
+
+### Features
+
+* add money_in and money_out event types ([49c1cf7](https://github.com/icoretech/mattermost-timeline/commit/49c1cf724ca1f5828b8caab8d48159279fdcaf62))
+* add reactions and channel-scoped timelines ([a897995](https://github.com/icoretech/mattermost-timeline/commit/a89799510a439abaddeb8c57c2ede1cb2552fc82))
+* add security, incident, user, scheduled, review, and message event types ([bbb36c0](https://github.com/icoretech/mattermost-timeline/commit/bbb36c0c283508b7e66e720c59016f96c17deffb))
+* show user avatar images in reaction pills ([84489c6](https://github.com/icoretech/mattermost-timeline/commit/84489c6fb1092cee2d83ecbbf280db0edf783f0b))
+
 ## [1.1.0](https://github.com/icoretech/mattermost-timeline/compare/v1.0.0...v1.1.0) (2026-03-19)
 
 
