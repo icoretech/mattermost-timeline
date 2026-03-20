@@ -74,7 +74,10 @@ export default function ReactionPill({
   const avatars = summary.recent_users.map((uid) => {
     const user = getUser(uid);
     const initial = user?.username?.[0]?.toUpperCase() || "?";
-    return { uid, initial };
+    const imageUrl = user?.last_picture_update
+      ? `/api/v4/users/${uid}/image?_=${user.last_picture_update}`
+      : user?.avatar_url || null;
+    return { uid, initial, imageUrl };
   });
 
   const tooltipText = tooltipUsers
@@ -96,7 +99,15 @@ export default function ReactionPill({
         <span className="reaction-pill__avatars">
           {avatars.map((a) => (
             <span key={a.uid} className="reaction-pill__avatar">
-              {a.initial}
+              {a.imageUrl ? (
+                <img
+                  src={a.imageUrl}
+                  alt={a.initial}
+                  className="reaction-pill__avatar-img"
+                />
+              ) : (
+                a.initial
+              )}
             </span>
           ))}
         </span>
