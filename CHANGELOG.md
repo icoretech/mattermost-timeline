@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/icoretech/mattermost-timeline/compare/v1.2.0...v1.3.0) (2026-03-20)
+
+
+### Features
+
+* inline slide-out reaction picker and updated screenshots ([0b92804](https://github.com/icoretech/mattermost-timeline/commit/0b92804fa74988889be815063b4935000ae13b59))
+
 ## [1.2.0](https://github.com/icoretech/mattermost-timeline/compare/v1.1.0...v1.2.0) (2026-03-20)
 
 
