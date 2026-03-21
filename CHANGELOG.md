@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/icoretech/mattermost-timeline/compare/v1.3.1...v1.3.2) (2026-03-21)
+
+
+### Bug Fixes
+
+* avoid external avatar loads in reaction pills ([ae61801](https://github.com/icoretech/mattermost-timeline/commit/ae61801caca541900e380ddee4c7e77d4fb88f35))
+
 ## [1.3.1](https://github.com/icoretech/mattermost-timeline/compare/v1.3.0...v1.3.1) (2026-03-21)
 
 
