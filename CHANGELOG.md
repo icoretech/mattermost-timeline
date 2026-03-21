@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.1](https://github.com/icoretech/mattermost-timeline/compare/v1.3.0...v1.3.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* harden timeline event access and links ([43a8820](https://github.com/icoretech/mattermost-timeline/commit/43a8820de0e840f9e5ed573bccc97df5f418fbd7))
+* regenerate screenshots without black bars ([e239371](https://github.com/icoretech/mattermost-timeline/commit/e239371de8d8718ecd43acbe413b06979b057f6b))
+* remove biome escape hatches from webapp ([0dac485](https://github.com/icoretech/mattermost-timeline/commit/0dac485cb90c8aef413bd2f40b4096fc7f606f0d))
+
 ## [1.3.0](https://github.com/icoretech/mattermost-timeline/compare/v1.2.0...v1.3.0) (2026-03-20)
 
 
