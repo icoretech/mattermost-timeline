@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactionClientSummary } from "../types";
+import type { ReactionClientSummary, TimelineUser } from "../types";
 import ReactionPill from "./reaction_pill";
 
 const REACTIONS = [
@@ -30,8 +30,7 @@ interface Props {
   onAddReaction: (icon: string) => void;
   onRemoveReaction: (icon: string) => void;
   onFetchUsers: (icon: string) => Promise<string[]>;
-  // biome-ignore lint/suspicious/noExplicitAny: Mattermost user profile shape
-  getUser: (userId: string) => any;
+  getUser: (userId: string) => TimelineUser | undefined;
 }
 
 export default function ReactionBar({

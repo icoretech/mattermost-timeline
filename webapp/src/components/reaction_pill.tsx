@@ -3,16 +3,16 @@ import {
   Eye,
   Hand,
   Heart,
+  type LucideIcon,
   Megaphone,
   PartyPopper,
   ThumbsUp,
   Wrench,
 } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
-import type { ReactionClientSummary } from "../types";
+import type { ReactionClientSummary, TimelineUser } from "../types";
 
-// biome-ignore lint/suspicious/noExplicitAny: lucide icons accept varied props
-const ICON_MAP: Record<string, React.FC<any>> = {
+const ICON_MAP: Record<string, LucideIcon> = {
   eyes: Eye,
   wrench: Wrench,
   check: CircleCheckBig,
@@ -30,8 +30,7 @@ interface Props {
   summary: ReactionClientSummary;
   onToggle: (icon: string) => void;
   onFetchUsers: (icon: string) => Promise<string[]>;
-  // biome-ignore lint/suspicious/noExplicitAny: Mattermost user profile shape
-  getUser: (userId: string) => any;
+  getUser: (userId: string) => TimelineUser | undefined;
 }
 
 export default function ReactionPill({

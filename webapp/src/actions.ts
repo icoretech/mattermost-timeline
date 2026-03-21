@@ -1,8 +1,9 @@
+import type { WebSocketMessage } from "@mattermost/client";
 import type { Dispatch } from "redux";
 
 import manifest from "./manifest";
 
-import type { EventEntry } from "./types";
+import type { EventEntry, ReactionClientSummary } from "./types";
 
 export const RECEIVED_EVENTS = `${manifest.id}_received_events`;
 export const RECEIVED_NEW_EVENT = `${manifest.id}_received_new_event`;
@@ -36,13 +37,18 @@ export interface EventFeedAction {
   [key: string]: unknown;
 }
 
+export type EventFeedDispatch = Dispatch<EventFeedAction>;
+export type EventFeedThunk<TReturn = void> = (
+  dispatch: EventFeedDispatch,
+) => Promise<TReturn> | TReturn;
+
 export function fetchEvents(
   teamId: string,
   offset = 0,
   limit = 50,
   channelId?: string,
-): (dispatch: Dispatch<EventFeedAction>) => Promise<void> {
-  return async (dispatch: Dispatch<EventFeedAction>) => {
+): EventFeedThunk {
+  return async (dispatch: EventFeedDispatch) => {
     dispatch({ type: SET_LOADING, loading: true });
     try {
       let url = `/plugins/${manifest.id}/api/v1/events?team_id=${encodeURIComponent(teamId)}&offset=${offset}&limit=${limit}`;
@@ -117,7 +123,9 @@ export function clearUpdatedEventFlag(eventId: string): EventFeedAction {
 }
 
 export function addReaction(eventId: string, icon: string) {
-  return async (dispatch: any) => {
+  return async (
+    dispatch: EventFeedDispatch,
+  ): Promise<Record<string, ReactionClientSummary>> => {
     dispatch({
       type: OPTIMISTIC_REACTION,
       event_id: eventId,
@@ -144,7 +152,9 @@ export function addReaction(eventId: string, icon: string) {
 }
 
 export function removeReaction(eventId: string, icon: string) {
-  return async (dispatch: any) => {
+  return async (
+    dispatch: EventFeedDispatch,
+  ): Promise<Record<string, ReactionClientSummary>> => {
     dispatch({
       type: OPTIMISTIC_REACTION,
       event_id: eventId,
@@ -191,7 +201,9 @@ export function receivedReactionUpdated(payload: {
   return { type: RECEIVED_REACTION_UPDATED, ...payload };
 }
 
-export function parseReactionWebSocket(msg: any) {
+export function parseReactionWebSocket(
+  msg: WebSocketMessage<{ payload: string }>,
+): EventFeedAction | null {
   try {
     const payload = JSON.parse(msg.data.payload);
     return receivedReactionUpdated(payload);

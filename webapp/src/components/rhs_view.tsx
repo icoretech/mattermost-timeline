@@ -1,3 +1,4 @@
+import type { GlobalState } from "@mattermost/types/store";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import type { Dispatch } from "redux";
@@ -7,6 +8,7 @@ import {
   clearEvents,
   clearNewEventFlag,
   clearUpdatedEventFlag,
+  type EventFeedThunk,
   fetchEvents,
   fetchReactionUsers,
   removeReaction,
@@ -16,7 +18,7 @@ import {
   getCurrentTeamId,
   getPluginState,
 } from "../selectors";
-import type { EventEntry } from "../types";
+import type { EventEntry, TimelineUser } from "../types";
 
 import TimelineEntry from "./timeline_entry";
 
@@ -24,14 +26,14 @@ import "../styles/timeline.scss";
 
 // Mattermost host store supports thunk dispatch
 type AppDispatch = Dispatch &
-  ((thunk: (dispatch: Dispatch) => Promise<void> | void) => void);
+  ((thunk: EventFeedThunk<unknown>) => Promise<unknown> | unknown);
 
 const RHSView: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const listRef = useRef<HTMLDivElement>(null);
   const initialLoadDone = useRef(false);
 
-  const store = useStore();
+  const store = useStore<GlobalState>();
   const currentTeamId = useSelector(getCurrentTeamId);
   const currentChannelId = useSelector(getCurrentChannelId);
   const pluginState = useSelector(getPluginState);
@@ -117,23 +119,23 @@ const RHSView: React.FC = () => {
   }, [dispatch, currentTeamId, currentChannelId, events.length, total]);
 
   const getUser = useCallback(
-    (userId: string) => {
-      const state = store.getState() as any;
-      return state?.entities?.users?.profiles?.[userId];
+    (userId: string): TimelineUser | undefined => {
+      const state = store.getState();
+      return state.entities.users.profiles[userId];
     },
     [store],
   );
 
   const handleAddReaction = useCallback(
     (eventId: string, icon: string) => {
-      dispatch(addReaction(eventId, icon) as any);
+      dispatch(addReaction(eventId, icon));
     },
     [dispatch],
   );
 
   const handleRemoveReaction = useCallback(
     (eventId: string, icon: string) => {
-      dispatch(removeReaction(eventId, icon) as any);
+      dispatch(removeReaction(eventId, icon));
     },
     [dispatch],
   );

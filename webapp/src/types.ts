@@ -1,3 +1,5 @@
+import type { UserProfile } from "@mattermost/types/users";
+
 export interface EventLink {
   url: string;
   label?: string;
@@ -35,6 +37,13 @@ export interface EventFeedState {
   enableReactions: boolean;
   currentUserId: string;
 }
+
+export type TimelineUser = Pick<
+  UserProfile,
+  "username" | "last_picture_update"
+> & {
+  avatar_url?: string;
+};
 
 export interface NewEventWebSocketMessage {
   data: { event: string };

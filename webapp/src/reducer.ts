@@ -40,18 +40,18 @@ function events(
     case RECEIVED_REACTION_UPDATED: {
       const { event_id, icon, count, user_ids } = action;
       return state.map((ev) => {
-        if (ev.id !== event_id) return ev;
+        if (ev.id !== event_id || !icon) return ev;
         const reactions = { ...(ev.client_reactions || {}) };
-        if (count === 0) {
-          delete reactions[icon!];
+        const reactionUserIds = user_ids ?? [];
+        const reactionCount = count ?? 0;
+        if (reactionCount === 0) {
+          delete reactions[icon];
         } else {
-          const recentCount = Math.min((user_ids as string[]).length, 3);
-          reactions[icon!] = {
-            count: count as number,
-            self: (user_ids as string[]).includes(
-              (action.currentUserId as string) || "",
-            ),
-            recent_users: (user_ids as string[]).slice(-recentCount),
+          const recentCount = Math.min(reactionUserIds.length, 3);
+          reactions[icon] = {
+            count: reactionCount,
+            self: reactionUserIds.includes(action.currentUserId ?? ""),
+            recent_users: reactionUserIds.slice(-recentCount),
           };
         }
         return {
@@ -64,15 +64,15 @@ function events(
     case OPTIMISTIC_REACTION: {
       const { event_id, icon, optimisticAction } = action;
       return state.map((ev) => {
-        if (ev.id !== event_id) return ev;
+        if (ev.id !== event_id || !icon) return ev;
         const reactions = { ...(ev.client_reactions || {}) };
-        const existing = reactions[icon as string] || {
+        const existing = reactions[icon] || {
           count: 0,
           self: false,
           recent_users: [],
         };
         if (optimisticAction === "add") {
-          reactions[icon as string] = {
+          reactions[icon] = {
             ...existing,
             count: existing.count + 1,
             self: true,
@@ -80,9 +80,9 @@ function events(
         } else if (optimisticAction === "remove") {
           const newCount = Math.max(0, existing.count - 1);
           if (newCount === 0) {
-            delete reactions[icon as string];
+            delete reactions[icon];
           } else {
-            reactions[icon as string] = {
+            reactions[icon] = {
               ...existing,
               count: newCount,
               self: false,
@@ -194,7 +194,7 @@ function enableReactions(state = true, action: EventFeedAction): boolean {
 function currentUserId(state = "", action: EventFeedAction): string {
   switch (action.type) {
     case SET_CURRENT_USER_ID:
-      return (action.currentUserId as string) ?? state;
+      return action.currentUserId ?? state;
     default:
       return state;
   }

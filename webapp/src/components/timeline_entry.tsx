@@ -20,7 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
-import type { EventEntry, EventLink } from "../types";
+import type { EventEntry, EventLink, TimelineUser } from "../types";
 import ReactionBar from "./reaction_bar";
 
 interface Props {
@@ -33,8 +33,7 @@ interface Props {
   onAddReaction: (eventId: string, icon: string) => void;
   onRemoveReaction: (eventId: string, icon: string) => void;
   onFetchReactionUsers: (eventId: string, icon: string) => Promise<string[]>;
-  // biome-ignore lint/suspicious/noExplicitAny: Mattermost user profile shape
-  getUser: (userId: string) => any;
+  getUser: (userId: string) => TimelineUser | undefined;
 }
 
 const ICON_SIZE = 18;
