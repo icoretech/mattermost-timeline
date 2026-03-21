@@ -58,6 +58,59 @@ func globalIndexKey(teamID string) string {
 	return indexKeyPrefix + teamID + ":" + globalChannelSuffix
 }
 
+func (s *EventStore) loadEventsFromIndex(key string, offset, limit int) ([]Event, int, error) {
+	if offset < 0 {
+		return nil, 0, fmt.Errorf("offset must be non-negative")
+	}
+
+	data, appErr := s.api.KVGet(key)
+	if appErr != nil {
+		return nil, 0, fmt.Errorf("failed to get index: %w", appErr)
+	}
+	if data == nil {
+		return []Event{}, 0, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal index: %w", err)
+	}
+
+	total := len(ids)
+	if offset >= total {
+		return []Event{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	pageIDs := ids[offset:end]
+
+	events := make([]Event, 0, len(pageIDs))
+	var skipped int
+	for _, id := range pageIDs {
+		eventData, appErr := s.api.KVGet(eventKey(id))
+		if appErr != nil {
+			s.api.LogWarn("Failed to load event", "event_id", id, "error", appErr.Error())
+			skipped++
+			continue
+		}
+		if eventData == nil {
+			skipped++
+			continue
+		}
+		var event Event
+		if err := json.Unmarshal(eventData, &event); err != nil {
+			s.api.LogWarn("Failed to unmarshal event", "event_id", id, "error", err.Error())
+			skipped++
+			continue
+		}
+		events = append(events, event)
+	}
+
+	return events, total - skipped, nil
+}
+
 // LookupByExternalID returns the internal event ID for a given external ID, or "" if not found.
 func (s *EventStore) LookupByExternalID(teamID, externalID string) (string, error) {
 	data, appErr := s.api.KVGet(extIDKey(teamID, externalID))
@@ -318,59 +371,20 @@ func (s *EventStore) removeFromIndex(key, eventID string) error {
 
 // GetEvents returns events for a team, paginated.
 func (s *EventStore) GetEvents(teamID string, offset, limit int) ([]Event, int, error) {
-	data, appErr := s.api.KVGet(indexKey(teamID))
-	if appErr != nil {
-		return nil, 0, fmt.Errorf("failed to get index: %w", appErr)
-	}
+	return s.loadEventsFromIndex(indexKey(teamID), offset, limit)
+}
 
-	if data == nil {
-		return []Event{}, 0, nil
-	}
-
-	var ids []string
-	if err := json.Unmarshal(data, &ids); err != nil {
-		return nil, 0, fmt.Errorf("failed to unmarshal index: %w", err)
-	}
-
-	total := len(ids)
-
-	// Apply pagination
-	if offset >= len(ids) {
-		return []Event{}, total, nil
-	}
-	end := offset + limit
-	if end > len(ids) {
-		end = len(ids)
-	}
-	pageIDs := ids[offset:end]
-
-	events := make([]Event, 0, len(pageIDs))
-	var skipped int
-	for _, id := range pageIDs {
-		eventData, appErr := s.api.KVGet(eventKey(id))
-		if appErr != nil {
-			s.api.LogWarn("Failed to load event", "event_id", id, "error", appErr.Error())
-			skipped++
-			continue
-		}
-		if eventData == nil {
-			skipped++
-			continue
-		}
-		var event Event
-		if err := json.Unmarshal(eventData, &event); err != nil {
-			s.api.LogWarn("Failed to unmarshal event", "event_id", id, "error", err.Error())
-			skipped++
-			continue
-		}
-		events = append(events, event)
-	}
-
-	return events, total - skipped, nil
+// GetGlobalEvents returns team-wide events from the global index.
+func (s *EventStore) GetGlobalEvents(teamID string, offset, limit int) ([]Event, int, error) {
+	return s.loadEventsFromIndex(globalIndexKey(teamID), offset, limit)
 }
 
 // GetEventsByChannel returns events for a specific channel merged with team-wide events.
 func (s *EventStore) GetEventsByChannel(teamID, channelID string, offset, limit int) ([]Event, int, error) {
+	if offset < 0 {
+		return nil, 0, fmt.Errorf("offset must be non-negative")
+	}
+
 	// Load channel-specific index
 	chData, appErr := s.api.KVGet(channelIndexKey(teamID, channelID))
 	if appErr != nil {

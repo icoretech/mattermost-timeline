@@ -277,7 +277,7 @@ func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	ids := []string{"evt-1"}
 	indexData, _ := json.Marshal(ids)
 
-	api.On("KVGet", "event_index:team-1").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-1").Return(evtJSON, (*model.AppError)(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
@@ -297,6 +297,40 @@ func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestHandleGetEvents_WithoutChannelIDUsesTeamWideIndex(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		MaxEventsStored:    "100",
+		MaxEventsDisplayed: "50",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+
+	evt := Event{ID: "evt-global", Title: "team wide", EventType: "generic"}
+	evtJSON, _ := json.Marshal(evt)
+	ids := []string{"evt-global"}
+	indexData, _ := json.Marshal(ids)
+
+	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event:evt-global").Return(evtJSON, (*model.AppError)(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp EventsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Events, 1)
+	assert.Equal(t, "evt-global", resp.Events[0].ID)
+	api.AssertNotCalled(t, "KVGet", "event_index:team-1")
+	api.AssertExpectations(t)
+}
+
 func TestHandleGetEvents_TimelineOrder(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{
@@ -308,7 +342,7 @@ func TestHandleGetEvents_TimelineOrder(t *testing.T) {
 
 	api.On("GetTeamMember", "team-1", "user-1").
 		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -389,7 +423,7 @@ func TestHandleGetEvents_WithPagination(t *testing.T) {
 	evt2 := Event{ID: "evt-2", Title: "middle", EventType: "generic"}
 	evt2JSON, _ := json.Marshal(evt2)
 
-	api.On("KVGet", "event_index:team-1").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-2").Return(evt2JSON, (*model.AppError)(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&offset=1&limit=1", nil)
@@ -417,7 +451,7 @@ func TestHandleGetEvents_DefaultLimit(t *testing.T) {
 
 	api.On("GetTeamMember", "team-1", "user-1").
 		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
 
 	// No limit param => defaults to 50
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
@@ -434,6 +468,48 @@ func TestHandleGetEvents_DefaultLimit(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestHandleGetEvents_NegativeOffsetRejected(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&offset=-1", nil)
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	require.NotPanics(t, func() {
+		p.router.ServeHTTP(rec, req)
+	})
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "offset must be non-negative")
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsOversizedBody(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:   "s3cret",
+		MaxEventsStored: "100",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	const oversizedWebhookBodyBytes = 256 * 1024
+	tooLargeTitle := strings.Repeat("a", oversizedWebhookBodyBytes)
+	payload := `{"title":"` + tooLargeTitle + `","team_id":"team-1"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Payload too large")
+}
+
 // --- Auth middleware tests ---
 
 func TestMattermostAuthRequired_WithUserID(t *testing.T) {
@@ -447,7 +523,7 @@ func TestMattermostAuthRequired_WithUserID(t *testing.T) {
 	// We need the full pipeline to reach handleGetEvents, so mock the team member check
 	api.On("GetTeamMember", "team-1", "user-1").
 		Return(&model.TeamMember{}, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")

@@ -1,6 +1,7 @@
 import React, { type ReactElement } from "react";
-
-import { renderMarkdown } from "./timeline_entry";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { EventEntry } from "../types";
+import TimelineEntry, { renderMarkdown } from "./timeline_entry";
 
 describe("renderMarkdown", () => {
   it("returns plain text unchanged", () => {
@@ -51,6 +52,12 @@ describe("renderMarkdown", () => {
     expect(el.props.target).toBe("_blank");
   });
 
+  it("does not render unsafe markdown links as clickable anchors", () => {
+    const result = renderMarkdown("[click](javascript:alert)");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe("click");
+  });
+
   it("renders newlines as br", () => {
     const result = renderMarkdown("line1\nline2");
     expect(result).toHaveLength(3);
@@ -66,5 +73,34 @@ describe("renderMarkdown", () => {
     expect(result[0]).toBe("hello ");
     expect((result[1] as ReactElement).type).toBe("strong");
     expect((result[3] as ReactElement).type).toBe("em");
+  });
+
+  it("does not render unsafe event link pills as clickable anchors", () => {
+    const event: EventEntry = {
+      id: "event-1",
+      team_id: "team-1",
+      timestamp: Date.now(),
+      title: "danger",
+      event_type: "info",
+      links: [{ url: "data:text/html,alert(1)", label: "danger" }],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(TimelineEntry, {
+        event,
+        isNew: false,
+        isUpdated: false,
+        onAnimationEnd: () => undefined,
+        onUpdateAnimationEnd: () => undefined,
+        enableReactions: false,
+        onAddReaction: () => undefined,
+        onRemoveReaction: () => undefined,
+        onFetchReactionUsers: async () => [],
+        getUser: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("danger");
+    expect(html).not.toContain('href="data:text/html,alert(1)"');
   });
 });

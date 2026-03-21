@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,6 +74,8 @@ func mergeLinks(existing, incoming []EventLink) []EventLink {
 	return merged
 }
 
+const maxWebhookBodyBytes = 256 * 1024
+
 func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 
@@ -88,9 +91,15 @@ func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes)
+
 	// Parse payload
 	var payload WebhookPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		if strings.Contains(err.Error(), "http: request body too large") {
+			http.Error(w, "Payload too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
@@ -268,6 +277,10 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		http.Error(w, "offset must be non-negative", http.StatusBadRequest)
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 50
@@ -292,7 +305,7 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	if channelID != "" {
 		events, total, err = p.store.GetEventsByChannel(teamID, channelID, offset, limit)
 	} else {
-		events, total, err = p.store.GetEvents(teamID, offset, limit)
+		events, total, err = p.store.GetGlobalEvents(teamID, offset, limit)
 	}
 	if err != nil {
 		p.API.LogError("Failed to get events", "error", err.Error())
@@ -316,7 +329,9 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		p.API.LogError("Failed to encode events response", "error", err.Error())
+	}
 }
 
 func (p *Plugin) handleAddReaction(w http.ResponseWriter, r *http.Request) {
@@ -395,7 +410,9 @@ func (p *Plugin) handleAddReaction(w http.ResponseWriter, r *http.Request) {
 
 	clientReactions := updated.Reactions.ToClientSummaries(userID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(clientReactions)
+	if err := json.NewEncoder(w).Encode(clientReactions); err != nil {
+		p.API.LogError("Failed to encode reactions response", "error", err.Error())
+	}
 }
 
 func (p *Plugin) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
@@ -479,7 +496,9 @@ func (p *Plugin) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
 
 	clientReactions := updated.Reactions.ToClientSummaries(userID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(clientReactions)
+	if err := json.NewEncoder(w).Encode(clientReactions); err != nil {
+		p.API.LogError("Failed to encode reactions response", "error", err.Error())
+	}
 }
 
 func (p *Plugin) handleGetReactionUsers(w http.ResponseWriter, r *http.Request) {
@@ -527,7 +546,9 @@ func (p *Plugin) handleGetReactionUsers(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"user_ids": userIDs,
-	})
+	}); err != nil {
+		p.API.LogError("Failed to encode reaction users response", "error", err.Error())
+	}
 }

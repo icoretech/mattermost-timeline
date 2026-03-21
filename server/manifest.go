@@ -20,7 +20,7 @@ const manifestStr = `
   "support_url": "https://github.com/icoretech/mattermost-timeline/issues",
   "release_notes_url": "https://github.com/icoretech/mattermost-timeline/releases",
   "icon_path": "assets/icon.svg",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "min_server_version": "7.0.0",
   "server": {
     "executables": {
@@ -86,6 +86,16 @@ const manifestStr = `
             "value": "newest_first"
           }
         ],
+        "hosting": "",
+        "secret": false
+      },
+      {
+        "key": "EnableReactions",
+        "display_name": "Enable Reactions",
+        "type": "bool",
+        "help_text": "Allow users to react to timeline events with icon-based reactions.",
+        "placeholder": "",
+        "default": true,
         "hosting": "",
         "secret": false
       }

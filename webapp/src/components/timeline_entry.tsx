@@ -33,10 +33,12 @@ interface Props {
   onAddReaction: (eventId: string, icon: string) => void;
   onRemoveReaction: (eventId: string, icon: string) => void;
   onFetchReactionUsers: (eventId: string, icon: string) => Promise<string[]>;
+  // biome-ignore lint/suspicious/noExplicitAny: Mattermost user profile shape
   getUser: (userId: string) => any;
 }
 
 const ICON_SIZE = 18;
+const SAFE_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 
 const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   host_online: { icon: CircleCheck, color: "#2dc26b" },
@@ -80,6 +82,17 @@ function formatTime(timestamp: number): string {
   return `${dateStr} ${time}`;
 }
 
+function isSafeUrl(url: string): boolean {
+  const trimmedUrl = url.trim();
+  const schemeMatch = trimmedUrl.match(/^([a-zA-Z][a-zA-Z\d+\-.]*:)/);
+
+  if (!schemeMatch) {
+    return true;
+  }
+
+  return SAFE_URL_PROTOCOLS.has(schemeMatch[1].toLowerCase());
+}
+
 export function renderMarkdown(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   let remaining = text;
@@ -89,17 +102,21 @@ export function renderMarkdown(text: string): React.ReactNode[] {
     // Links: [text](url)
     const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (linkMatch) {
-      parts.push(
-        <a
-          key={key++}
-          href={linkMatch[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="timeline-entry__md-link"
-        >
-          {linkMatch[1]}
-        </a>,
-      );
+      if (isSafeUrl(linkMatch[2])) {
+        parts.push(
+          <a
+            key={key++}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="timeline-entry__md-link"
+          >
+            {linkMatch[1]}
+          </a>,
+        );
+      } else {
+        parts.push(linkMatch[1]);
+      }
       remaining = remaining.slice(linkMatch[0].length);
       continue;
     }
@@ -236,19 +253,30 @@ const TimelineEntry: React.FC<Props> = ({
         )}
         {links.length > 0 && (
           <div className="timeline-entry__links">
-            {links.map((l: EventLink) => (
-              <a
-                key={l.url}
-                className="timeline-entry__link-icon"
-                href={l.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={l.label || l.url}
-              >
-                <ExternalLink size={13} strokeWidth={2} />
-                <span>{l.label || "Link"}</span>
-              </a>
-            ))}
+            {links.map((l: EventLink) =>
+              isSafeUrl(l.url) ? (
+                <a
+                  key={l.url}
+                  className="timeline-entry__link-icon"
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={l.label || l.url}
+                >
+                  <ExternalLink size={13} strokeWidth={2} />
+                  <span>{l.label || "Link"}</span>
+                </a>
+              ) : (
+                <span
+                  key={l.url}
+                  className="timeline-entry__link-icon"
+                  title={l.label || l.url}
+                >
+                  <ExternalLink size={13} strokeWidth={2} />
+                  <span>{l.label || "Link"}</span>
+                </span>
+              ),
+            )}
           </div>
         )}
         {enableReactions && (
