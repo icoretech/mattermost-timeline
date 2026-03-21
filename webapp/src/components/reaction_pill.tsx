@@ -25,6 +25,14 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 const TOOLTIP_CACHE_TTL_MS = 30000;
 
+function buildAvatarImageUrl(
+  userId: string,
+  lastPictureUpdate?: number,
+): string {
+  const baseUrl = `/api/v4/users/${userId}/image`;
+  return lastPictureUpdate ? `${baseUrl}?_=${lastPictureUpdate}` : baseUrl;
+}
+
 interface Props {
   icon: string;
   summary: ReactionClientSummary;
@@ -73,9 +81,7 @@ export default function ReactionPill({
   const avatars = summary.recent_users.map((uid) => {
     const user = getUser(uid);
     const initial = user?.username?.[0]?.toUpperCase() || "?";
-    const imageUrl = user?.last_picture_update
-      ? `/api/v4/users/${uid}/image?_=${user.last_picture_update}`
-      : user?.avatar_url || null;
+    const imageUrl = buildAvatarImageUrl(uid, user?.last_picture_update);
     return { uid, initial, imageUrl };
   });
 
