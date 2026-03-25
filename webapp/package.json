@@ -9,7 +9,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "lucide-react": "0.577.0"
+    "lucide-react": "1.7.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.8",
