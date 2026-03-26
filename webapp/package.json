@@ -5,6 +5,7 @@
     "build": "vite build",
     "build:watch": "vite build --watch",
     "lint": "biome check --write --assist-enabled=true . && tsc --noEmit",
+    "biome:ci": "biome ci .",
     "test": "vitest run",
     "test:watch": "vitest"
   },

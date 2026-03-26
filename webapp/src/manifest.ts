@@ -9,7 +9,7 @@ const manifest = JSON.parse(`
     "support_url": "https://github.com/icoretech/mattermost-timeline/issues",
     "release_notes_url": "https://github.com/icoretech/mattermost-timeline/releases",
     "icon_path": "assets/icon.svg",
-    "version": "1.3.0",
+    "version": "1.3.2",
     "min_server_version": "7.0.0",
     "server": {
         "executables": {

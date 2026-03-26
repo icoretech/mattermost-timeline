@@ -1,7 +1,6 @@
 import type { GlobalState } from "@mattermost/types/store";
 import React from "react";
 import type { Store } from "redux";
-import type { PluginRegistry } from "types/mattermost-webapp";
 import {
   type EventFeedAction,
   parseNewEventWebSocket,
@@ -14,6 +13,7 @@ import RHSView from "./components/rhs_view";
 import manifest from "./manifest";
 import reducer from "./reducer";
 import type { NewEventWebSocketMessage } from "./types";
+import type { PluginRegistry } from "./types/mattermost-webapp";
 
 export default class Plugin {
   public initialize(registry: PluginRegistry, store: Store<GlobalState>) {

@@ -264,6 +264,7 @@ ifneq ($(HAS_WEBAPP),)
 	mkdir -p dist/$(PLUGIN_ID)/webapp
 	cp -r webapp/dist dist/$(PLUGIN_ID)/webapp/
 endif
+	find dist/$(PLUGIN_ID) -name '.DS_Store' -delete
 ifeq ($(shell uname),Darwin)
 	cd dist && tar --disable-copyfile -cvzf $(BUNDLE_NAME) $(PLUGIN_ID)
 else
