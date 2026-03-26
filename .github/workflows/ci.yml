@@ -31,10 +31,10 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
       - run: make apply
       - run: cd webapp && npm ci
-      - run: cd webapp && npx tsc --noEmit
-      - run: cd webapp && npx biome check .
-      - run: cd webapp && npx vitest run
-      - run: cd webapp && npx vite build
+      - run: cd webapp && npm run typecheck
+      - run: cd webapp && npm run biome:ci
+      - run: cd webapp && npm run test
+      - run: cd webapp && npm run build
 
   build:
     runs-on: ubuntu-latest

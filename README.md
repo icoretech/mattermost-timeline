@@ -156,8 +156,12 @@ cd webapp && npm test
 ### Lint
 
 ```bash
-# Webapp: runs Biome + TypeScript type checking
+# Local fix mode: runs Biome write mode + TypeScript type checking
 cd webapp && npm run lint
+
+# CI-safe checks
+cd webapp && npm run biome:ci
+cd webapp && npm run typecheck
 ```
 
 ### Deploy to a local Mattermost instance
