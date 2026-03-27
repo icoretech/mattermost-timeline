@@ -12,7 +12,10 @@ import Icon from "./components/icon";
 import RHSView from "./components/rhs_view";
 import manifest from "./manifest";
 import reducer from "./reducer";
-import type { NewEventWebSocketMessage } from "./types";
+import type {
+  NewEventWebSocketMessage,
+  ReactionUpdatedWebSocketMessage,
+} from "./types";
 import type { PluginRegistry } from "./types/mattermost-webapp";
 
 export default class Plugin {
@@ -58,7 +61,7 @@ export default class Plugin {
 
     registry.registerWebSocketEventHandler<{ payload: string }>(
       `custom_${manifest.id}_reaction_updated`,
-      (msg) => {
+      (msg: ReactionUpdatedWebSocketMessage) => {
         const action = parseReactionWebSocket(msg);
         if (action) {
           const userId = store.getState().entities.users.currentUserId || "";

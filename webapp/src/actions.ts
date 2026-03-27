@@ -1,9 +1,12 @@
-import type { WebSocketMessage } from "@mattermost/client";
 import type { Dispatch } from "redux";
 
 import manifest from "./manifest";
 
-import type { EventEntry, ReactionClientSummary } from "./types";
+import type {
+  EventEntry,
+  ReactionClientSummary,
+  ReactionUpdatedWebSocketMessage,
+} from "./types";
 
 export const RECEIVED_EVENTS = `${manifest.id}_received_events`;
 export const RECEIVED_NEW_EVENT = `${manifest.id}_received_new_event`;
@@ -202,7 +205,7 @@ export function receivedReactionUpdated(payload: {
 }
 
 export function parseReactionWebSocket(
-  msg: WebSocketMessage<{ payload: string }>,
+  msg: ReactionUpdatedWebSocketMessage,
 ): EventFeedAction | null {
   try {
     const payload = JSON.parse(msg.data.payload);

@@ -5,8 +5,10 @@ import {
   clearNewEventFlag,
   fetchEvents,
   parseNewEventWebSocket,
+  parseReactionWebSocket,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
+  RECEIVED_REACTION_UPDATED,
   receivedNewEvent,
   SET_ERROR,
   SET_LOADING,
@@ -59,6 +61,53 @@ describe("parseNewEventWebSocket", () => {
   it("returns null for invalid JSON", () => {
     const result = parseNewEventWebSocket("not-json");
     expect(result).toBeNull();
+  });
+});
+
+describe("parseReactionWebSocket", () => {
+  it("parses valid reaction payloads and returns an action", () => {
+    const result = parseReactionWebSocket({
+      event: "custom_ch.icorete.mattermost-timeline_reaction_updated",
+      data: {
+        payload: JSON.stringify({
+          event_id: "e1",
+          icon: "eyes",
+          count: 2,
+          user_ids: ["u1", "u2"],
+        }),
+      },
+      broadcast: {
+        omit_users: {},
+        user_id: "",
+        channel_id: "",
+        team_id: "t1",
+      },
+      seq: 1,
+    });
+
+    expect(result).toEqual({
+      type: RECEIVED_REACTION_UPDATED,
+      event_id: "e1",
+      icon: "eyes",
+      count: 2,
+      user_ids: ["u1", "u2"],
+    });
+  });
+
+  it("returns null for invalid reaction payloads", () => {
+    expect(
+      parseReactionWebSocket({
+        event: "custom_ch.icorete.mattermost-timeline_reaction_updated",
+        data: { payload: "not-json" },
+        broadcast: {
+          omit_users: {},
+          user_id: "",
+          channel_id: "",
+          team_id: "t1",
+        },
+        seq: 1,
+      }),
+    ).toBeNull();
   });
 });
 
