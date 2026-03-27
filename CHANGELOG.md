@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.3](https://github.com/icoretech/mattermost-timeline/compare/v1.3.2...v1.3.3) (2026-03-27)
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide-react to v1 ([ebdb8ec](https://github.com/icoretech/mattermost-timeline/commit/ebdb8ec7e2525fd4e5fbe5797151f6d1dc25d047))
+* restore webapp lint and bundle hygiene ([129cc8b](https://github.com/icoretech/mattermost-timeline/commit/129cc8b999c99a8eefdb5026fcc15131b75af07e))
+* **webapp:** support mattermost websocket base messages ([37ec11a](https://github.com/icoretech/mattermost-timeline/commit/37ec11a34a5ee9773cbf72ef4dd5177b3bc27815))
+
 ## [1.3.2](https://github.com/icoretech/mattermost-timeline/compare/v1.3.1...v1.3.2) (2026-03-21)
 
 
