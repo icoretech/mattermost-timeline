@@ -5,7 +5,7 @@
 
 import type { Reducer } from "redux";
 
-import type { WebSocketMessage } from "@mattermost/client";
+import type { BaseWebSocketMessage } from "@mattermost/client";
 import type { Channel } from "@mattermost/types/channels";
 import type { FileInfo } from "@mattermost/types/files";
 import type { Post, PostEmbed } from "@mattermost/types/posts";
@@ -742,11 +742,11 @@ export interface PluginRegistry {
    */
   registerWebSocketEventHandler<T = Record<string, string>>(
     ...args:
-      | [event: string, handler: (msg: WebSocketMessage<T>) => void]
+      | [event: string, handler: (msg: BaseWebSocketMessage<string, T>) => void]
       | [
           {
             event: string;
-            handler: (msg: WebSocketMessage<T>) => void;
+            handler: (msg: BaseWebSocketMessage<string, T>) => void;
           },
         ]
   ): void;

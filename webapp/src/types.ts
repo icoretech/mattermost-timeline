@@ -1,3 +1,4 @@
+import type { BaseWebSocketMessage } from "@mattermost/client";
 import type { UserProfile } from "@mattermost/types/users";
 
 export interface EventLink {
@@ -45,6 +46,12 @@ export type TimelineUser = Pick<
   avatar_url?: string;
 };
 
-export interface NewEventWebSocketMessage {
-  data: { event: string };
-}
+export type PluginWebSocketMessage<T> = BaseWebSocketMessage<string, T>;
+
+export type NewEventWebSocketMessage = PluginWebSocketMessage<{
+  event: string;
+}>;
+
+export type ReactionUpdatedWebSocketMessage = PluginWebSocketMessage<{
+  payload: string;
+}>;
