@@ -17,7 +17,7 @@
     "@biomejs/biome": "2.4.10",
     "@mattermost/client": "11.5.0",
     "@mattermost/types": "11.5.0",
-    "@types/node": "25.5.0",
+    "@types/node": "25.5.2",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.1",
