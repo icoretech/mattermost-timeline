@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4](https://github.com/icoretech/mattermost-timeline/compare/v1.3.3...v1.3.4) (2026-04-03)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/mattermost/mattermost/server/public to v0.3.0 ([#32](https://github.com/icoretech/mattermost-timeline/issues/32)) ([172c42d](https://github.com/icoretech/mattermost-timeline/commit/172c42ddc476f76cca767f9307037ffb5c04d0ed))
+
 ## [1.3.3](https://github.com/icoretech/mattermost-timeline/compare/v1.3.2...v1.3.3) (2026-03-27)
 
 
