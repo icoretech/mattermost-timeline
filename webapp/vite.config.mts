@@ -1,9 +1,14 @@
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
-const pluginId = require("../plugin.json").id;
+const configDir = dirname(fileURLToPath(import.meta.url));
+const pluginId = JSON.parse(
+  readFileSync(new URL("../plugin.json", import.meta.url), "utf8"),
+).id as string;
 
 export default defineConfig({
   plugins: [
@@ -14,7 +19,7 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: resolve(__dirname, "src/index.tsx"),
+      entry: resolve(configDir, "src/index.tsx"),
       formats: ["iife"],
       name: `plugin_${pluginId.replace(/[.-]/g, "_")}`,
       fileName: () => "main.js",
@@ -58,7 +63,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      src: resolve(__dirname, "src"),
+      src: resolve(configDir, "src"),
     },
   },
 });
