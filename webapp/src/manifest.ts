@@ -2,7 +2,8 @@
 
 const manifestVersion = "1.3.5"; // x-release-please-version
 
-const manifest = JSON.parse(`
+const manifest = JSON.parse(
+  `
 {
     "id": "ch.icorete.mattermost-timeline",
     "name": "Mattermost Timeline",
@@ -94,6 +95,7 @@ const manifest = JSON.parse(`
         "sections": null
     }
 }
-`.replace("__RELEASE_PLEASE_VERSION__", manifestVersion));
+`.replace("__RELEASE_PLEASE_VERSION__", manifestVersion),
+);
 
 export default manifest;

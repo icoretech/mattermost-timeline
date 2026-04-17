@@ -1,14 +1,12 @@
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
+import pluginManifest from "../plugin.json";
 import { defineConfig } from "vite";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
 const configDir = dirname(fileURLToPath(import.meta.url));
-const pluginId = JSON.parse(
-  readFileSync(new URL("../plugin.json", import.meta.url), "utf8"),
-).id as string;
+const pluginId = pluginManifest.id;
 
 export default defineConfig({
   plugins: [
