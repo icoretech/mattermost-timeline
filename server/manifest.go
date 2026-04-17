@@ -11,7 +11,9 @@ import (
 
 var manifest *model.Manifest
 
-const manifestStr = `
+const manifestVersion = "1.3.5" // x-release-please-version
+
+var manifestStr = strings.Replace(`
 {
   "id": "ch.icorete.mattermost-timeline",
   "name": "Mattermost Timeline",
@@ -20,7 +22,7 @@ const manifestStr = `
   "support_url": "https://github.com/icoretech/mattermost-timeline/issues",
   "release_notes_url": "https://github.com/icoretech/mattermost-timeline/releases",
   "icon_path": "assets/icon.svg",
-  "version": "1.3.2",
+  "version": "__RELEASE_PLEASE_VERSION__",
   "min_server_version": "7.0.0",
   "server": {
     "executables": {
@@ -103,7 +105,7 @@ const manifestStr = `
     "sections": null
   }
 }
-`
+`, "__RELEASE_PLEASE_VERSION__", manifestVersion, 1)
 
 func init() {
 	_ = json.NewDecoder(strings.NewReader(manifestStr)).Decode(&manifest)
