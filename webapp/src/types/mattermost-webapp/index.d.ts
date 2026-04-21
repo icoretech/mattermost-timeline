@@ -41,6 +41,13 @@ export type PluginSiteStatsHandler = () => Promise<
   Record<string, PluginAnalyticsRow>
 >;
 
+export type RHSPluginPopoutListeners = {
+  sendToPopout: (channel: string, data?: unknown) => void;
+  onMessageFromPopout: (
+    callback: (channel: string, data?: unknown) => void,
+  ) => void;
+};
+
 export type DesktopNotificationArgs = {
   title: string;
   body: string;
@@ -1020,6 +1027,15 @@ export interface PluginRegistry {
     toggleRHSPlugin: { type: string };
   };
 
+  registerRHSPluginPopoutListener?: (
+    pluginId: string,
+    onPopoutOpened: (
+      teamName: string,
+      channelName: string | undefined,
+      listeners: RHSPluginPopoutListeners,
+    ) => void,
+  ) => void;
+
   /**
    * Register a Needs Team component by providing a route past /:team/:pluginId/ to be displayed at.
    * Accepts the following:
@@ -1312,4 +1328,18 @@ export interface PluginRegistry {
   ): UniqueIdentifier;
 
   // The most up-to-date list of methods can be found at https://developers.mattermost.com/extend/plugins/webapp/reference
+}
+
+declare global {
+  interface Window {
+    WebappUtils?: {
+      popouts?: {
+        isPopoutWindow: () => boolean;
+        onMessageFromParent: (
+          callback: (channel: string, data?: unknown) => void,
+        ) => void;
+        sendToParent: (channel: string, data?: unknown) => void;
+      };
+    };
+  }
 }
