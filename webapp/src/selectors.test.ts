@@ -1,5 +1,9 @@
 import type { GlobalState } from "@mattermost/types/store";
-import { getCurrentTeamId, getPluginState } from "./selectors";
+import {
+  getCurrentChannelId,
+  getCurrentTeamId,
+  getPluginState,
+} from "./selectors";
 
 describe("selectors", () => {
   describe("getPluginState", () => {
@@ -36,6 +40,33 @@ describe("selectors", () => {
         entities: { teams: { currentTeamId: "" } },
       } as unknown as GlobalState;
       expect(getCurrentTeamId(state)).toBe("");
+    });
+
+    it("falls back to hydrated plugin team id", () => {
+      const state = {
+        entities: { teams: { currentTeamId: "" } },
+        "plugins-ch.icorete.mattermost-timeline": { viewTeamId: "team123" },
+      } as unknown as GlobalState;
+      expect(getCurrentTeamId(state)).toBe("team123");
+    });
+  });
+
+  describe("getCurrentChannelId", () => {
+    it("returns channel id from state", () => {
+      const state = {
+        entities: { channels: { currentChannelId: "channel123" } },
+      } as unknown as GlobalState;
+      expect(getCurrentChannelId(state)).toBe("channel123");
+    });
+
+    it("falls back to hydrated plugin channel id", () => {
+      const state = {
+        entities: { channels: { currentChannelId: "" } },
+        "plugins-ch.icorete.mattermost-timeline": {
+          viewChannelId: "channel123",
+        },
+      } as unknown as GlobalState;
+      expect(getCurrentChannelId(state)).toBe("channel123");
     });
   });
 });

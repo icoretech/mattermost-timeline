@@ -12,9 +12,17 @@ export function getPluginState(state: GlobalState): EventFeedState | undefined {
 
 // Returns empty string when no team is selected; callers use truthiness to guard.
 export function getCurrentTeamId(state: GlobalState): string {
-  return state.entities.teams.currentTeamId || "";
+  return (
+    state.entities.teams.currentTeamId ||
+    getPluginState(state)?.viewTeamId ||
+    ""
+  );
 }
 
 export function getCurrentChannelId(state: GlobalState): string {
-  return state.entities.channels.currentChannelId || "";
+  return (
+    state.entities.channels.currentChannelId ||
+    getPluginState(state)?.viewChannelId ||
+    ""
+  );
 }

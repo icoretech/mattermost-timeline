@@ -32,6 +32,7 @@ const RHSView: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const listRef = useRef<HTMLDivElement>(null);
   const initialLoadDone = useRef(false);
+  const loadedContextRef = useRef({ teamId: "", channelId: "" });
 
   const store = useStore<GlobalState>();
   const currentTeamId = useSelector(getCurrentTeamId);
@@ -47,9 +48,18 @@ const RHSView: React.FC = () => {
     total = 0,
     timelineOrder = "oldest_first",
     enableReactions = true,
+    viewTeamId = "",
+    viewChannelId = "",
   } = pluginState || {};
 
   const isOldestFirst = timelineOrder === "oldest_first";
+
+  useEffect(() => {
+    loadedContextRef.current = {
+      teamId: viewTeamId,
+      channelId: viewChannelId,
+    };
+  }, [viewTeamId, viewChannelId]);
 
   // oldest_first: reverse store order (store has newest first) so oldest is at top
   // newest_first: use store order as-is (newest at top)
@@ -60,7 +70,14 @@ const RHSView: React.FC = () => {
 
   useEffect(() => {
     if (currentTeamId) {
-      dispatch(clearEvents());
+      const sameContext =
+        loadedContextRef.current.teamId === currentTeamId &&
+        loadedContextRef.current.channelId === (currentChannelId || "");
+
+      if (!sameContext) {
+        dispatch(clearEvents());
+      }
+
       dispatch(
         fetchEvents(currentTeamId, 0, 50, currentChannelId || undefined),
       );
