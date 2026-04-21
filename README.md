@@ -174,6 +174,16 @@ make deploy
 
 This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Merging to `main` creates a release PR that, when merged, publishes a signed GitHub release with the plugin bundle attached.
 
+### Maintainer prerequisites
+
+The automated release workflow depends on a few repository-level prerequisites:
+
+- `GPG_PRIVATE_KEY` must be configured in GitHub Actions secrets with the armored private key that matches [`assets/signing-key.asc`](assets/signing-key.asc)
+- the release workflow must be allowed to use the default `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`
+- rerunning a release job will replace existing assets on the same tag, so the uploaded `.tar.gz` and `.tar.gz.sig` stay in sync
+
+If you rotate the signing key, update both the GitHub secret and `assets/signing-key.asc` in the repository so user verification instructions stay correct.
+
 ## Security
 
 To report a security vulnerability, please email [masterkain@gmail.com](mailto:masterkain@gmail.com).
