@@ -42,7 +42,7 @@ endif
 
 # ====================================================================================
 # Used for semver bumping
-PROTECTED_BRANCH := master
+PROTECTED_BRANCH := main
 APP_NAME = $(shell basename -s .git `git config --get remote.origin.url`)
 CURRENT_VERSION = $(strip $(shell git describe --abbrev=0 --tags 2>/dev/null || true))
 LATEST_RELEASE_TAG_RAW = $(shell git tag -l "v*" --sort=-v:refname | grep -v '\-rc' | head -n 1 || true)
