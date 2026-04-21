@@ -4,6 +4,7 @@ import manifest from "./manifest";
 
 import type {
   EventEntry,
+  EventFeedState,
   ReactionClientSummary,
   ReactionUpdatedWebSocketMessage,
 } from "./types";
@@ -19,6 +20,8 @@ export const RECEIVED_REACTION_UPDATED = `${manifest.id}_received_reaction_updat
 export const OPTIMISTIC_REACTION = `${manifest.id}_optimistic_reaction`;
 export const CLEAR_EVENTS = `${manifest.id}_clear_events`;
 export const SET_CURRENT_USER_ID = `${manifest.id}_set_current_user_id`;
+export const SET_VIEW_CONTEXT = `${manifest.id}_set_view_context`;
+export const HYDRATE_POPOUT_STATE = `${manifest.id}_hydrate_popout_state`;
 
 export interface EventFeedAction {
   type: string;
@@ -32,6 +35,9 @@ export interface EventFeedAction {
   timelineOrder?: string;
   enableReactions?: boolean;
   currentUserId?: string;
+  teamId?: string;
+  channelId?: string;
+  hydratedState?: EventFeedState;
   event_id?: string;
   icon?: string;
   count?: number;
@@ -73,6 +79,8 @@ export function fetchEvents(
         append: offset > 0,
         timelineOrder: data.timeline_order || "oldest_first",
         enableReactions: data.enable_reactions,
+        teamId,
+        channelId: channelId || "",
       });
     } catch (error) {
       const message =
@@ -221,4 +229,21 @@ export function clearEvents() {
 
 export function setCurrentUserId(userId: string) {
   return { type: SET_CURRENT_USER_ID, currentUserId: userId };
+}
+
+export function setViewContext(teamId: string, channelId = "") {
+  return { type: SET_VIEW_CONTEXT, teamId, channelId };
+}
+
+export function hydratePopoutState(
+  hydratedState: EventFeedState,
+  teamId: string,
+  channelId = "",
+) {
+  return {
+    type: HYDRATE_POPOUT_STATE,
+    hydratedState,
+    teamId,
+    channelId,
+  };
 }

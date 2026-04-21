@@ -2,6 +2,7 @@ import type { EventFeedAction } from "./actions";
 import {
   CLEAR_EVENTS,
   CLEAR_NEW_EVENT_FLAG,
+  HYDRATE_POPOUT_STATE,
   OPTIMISTIC_REACTION,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
@@ -38,7 +39,37 @@ describe("reducer", () => {
       timelineOrder: "oldest_first",
       enableReactions: true,
       currentUserId: "",
+      viewTeamId: "",
+      viewChannelId: "",
     });
+  });
+
+  it("hydrates popout state and context", () => {
+    const state = reducer(initial, {
+      type: HYDRATE_POPOUT_STATE,
+      teamId: "team123",
+      channelId: "channel123",
+      hydratedState: {
+        events: [makeEvent({ id: "e2" })],
+        isLoading: false,
+        error: null,
+        total: 1,
+        newEventIds: ["e2"],
+        updatedEventIds: [],
+        timelineOrder: "newest_first",
+        enableReactions: false,
+        currentUserId: "user123",
+        viewTeamId: "",
+        viewChannelId: "",
+      },
+    } as EventFeedAction);
+
+    expect(state.events[0].id).toBe("e2");
+    expect(state.timelineOrder).toBe("newest_first");
+    expect(state.enableReactions).toBe(false);
+    expect(state.currentUserId).toBe("user123");
+    expect(state.viewTeamId).toBe("team123");
+    expect(state.viewChannelId).toBe("channel123");
   });
 
   describe("events", () => {

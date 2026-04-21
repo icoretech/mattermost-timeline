@@ -37,6 +37,8 @@ export interface EventFeedState {
   timelineOrder: "oldest_first" | "newest_first";
   enableReactions: boolean;
   currentUserId: string;
+  viewTeamId: string;
+  viewChannelId: string;
 }
 
 export type TimelineUser = Pick<

@@ -4,6 +4,7 @@ import {
   CLEAR_EVENTS,
   CLEAR_NEW_EVENT_FLAG,
   CLEAR_UPDATED_EVENT_FLAG,
+  HYDRATE_POPOUT_STATE,
   OPTIMISTIC_REACTION,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
@@ -12,6 +13,7 @@ import {
   SET_CURRENT_USER_ID,
   SET_ERROR,
   SET_LOADING,
+  SET_VIEW_CONTEXT,
 } from "./actions";
 import type { EventEntry } from "./types";
 
@@ -25,6 +27,8 @@ function events(
         return [...state, ...(action.events ?? [])];
       }
       return action.events ?? [];
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.events ?? state;
     case RECEIVED_NEW_EVENT:
       if (!action.event || state.some((e) => e.id === action.event?.id)) {
         return state;
@@ -107,6 +111,8 @@ function isLoading(state = false, action: EventFeedAction): boolean {
   switch (action.type) {
     case SET_LOADING:
       return action.loading ?? false;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.isLoading ?? state;
     default:
       return state;
   }
@@ -120,6 +126,8 @@ function total(state = 0, action: EventFeedAction): number {
       return state + 1;
     case CLEAR_EVENTS:
       return 0;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.total ?? state;
     default:
       return state;
   }
@@ -133,6 +141,8 @@ function newEventIds(state: string[] = [], action: EventFeedAction): string[] {
       return action.eventId
         ? state.filter((id) => id !== action.eventId)
         : state;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.newEventIds ?? state;
     default:
       return state;
   }
@@ -149,6 +159,8 @@ function updatedEventIds(
       return action.eventId
         ? state.filter((id) => id !== action.eventId)
         : state;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.updatedEventIds ?? state;
     default:
       return state;
   }
@@ -165,6 +177,8 @@ function error(
       return null;
     case CLEAR_EVENTS:
       return null;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.error ?? state;
     default:
       return state;
   }
@@ -177,6 +191,8 @@ function timelineOrder(
   switch (action.type) {
     case RECEIVED_EVENTS:
       return (action.timelineOrder as "oldest_first" | "newest_first") || state;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.timelineOrder ?? state;
     default:
       return state;
   }
@@ -186,6 +202,8 @@ function enableReactions(state = true, action: EventFeedAction): boolean {
   switch (action.type) {
     case RECEIVED_EVENTS:
       return action.enableReactions ?? state;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.enableReactions ?? state;
     default:
       return state;
   }
@@ -195,6 +213,34 @@ function currentUserId(state = "", action: EventFeedAction): string {
   switch (action.type) {
     case SET_CURRENT_USER_ID:
       return action.currentUserId ?? state;
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState?.currentUserId ?? state;
+    default:
+      return state;
+  }
+}
+
+function viewTeamId(state = "", action: EventFeedAction): string {
+  switch (action.type) {
+    case RECEIVED_EVENTS:
+    case SET_VIEW_CONTEXT:
+    case HYDRATE_POPOUT_STATE:
+      return action.teamId ?? state;
+    case CLEAR_EVENTS:
+      return "";
+    default:
+      return state;
+  }
+}
+
+function viewChannelId(state = "", action: EventFeedAction): string {
+  switch (action.type) {
+    case RECEIVED_EVENTS:
+    case SET_VIEW_CONTEXT:
+    case HYDRATE_POPOUT_STATE:
+      return action.channelId ?? state;
+    case CLEAR_EVENTS:
+      return "";
     default:
       return state;
   }
@@ -210,4 +256,6 @@ export default combineReducers({
   timelineOrder,
   enableReactions,
   currentUserId,
+  viewTeamId,
+  viewChannelId,
 });
