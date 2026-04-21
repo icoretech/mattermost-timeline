@@ -53,4 +53,4 @@ jobs:
       - name: Upload release artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/*.tar.gz dist/*.tar.gz.sig
+        run: gh release upload --clobber ${{ needs.release-please.outputs.tag_name }} dist/*.tar.gz dist/*.tar.gz.sig
