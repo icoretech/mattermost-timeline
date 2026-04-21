@@ -43,18 +43,15 @@ endif
 # ====================================================================================
 # Used for semver bumping
 PROTECTED_BRANCH := master
-APP_NAME    := $(shell basename -s .git `git config --get remote.origin.url`)
-CURRENT_VERSION := $(strip $(shell git describe --abbrev=0 --tags))
-LATEST_RELEASE_TAG_RAW := $(shell git tag -l "v*" --sort=-v:refname | grep -v '\-rc' | head -n 1 || true)
-LATEST_RELEASE_TAG := $(strip $(LATEST_RELEASE_TAG_RAW))
-ifeq ($(LATEST_RELEASE_TAG),)
-LATEST_RELEASE_TAG := $(CURRENT_VERSION)
-endif
-VERSION_PARTS := $(subst ., ,$(subst v,,$(subst -rc, ,$(CURRENT_VERSION))))
-MAJOR := $(word 1,$(VERSION_PARTS))
-MINOR := $(word 2,$(VERSION_PARTS))
-PATCH := $(word 3,$(VERSION_PARTS))
-RC := $(shell echo $(CURRENT_VERSION) | grep -oE 'rc[0-9]+' | sed 's/rc//')
+APP_NAME = $(shell basename -s .git `git config --get remote.origin.url`)
+CURRENT_VERSION = $(strip $(shell git describe --abbrev=0 --tags 2>/dev/null || true))
+LATEST_RELEASE_TAG_RAW = $(shell git tag -l "v*" --sort=-v:refname | grep -v '\-rc' | head -n 1 || true)
+LATEST_RELEASE_TAG = $(strip $(or $(LATEST_RELEASE_TAG_RAW),$(CURRENT_VERSION)))
+VERSION_PARTS = $(subst ., ,$(subst v,,$(subst -rc, ,$(CURRENT_VERSION))))
+MAJOR = $(word 1,$(VERSION_PARTS))
+MINOR = $(word 2,$(VERSION_PARTS))
+PATCH = $(word 3,$(VERSION_PARTS))
+RC = $(shell printf '%s' "$(CURRENT_VERSION)" | grep -oE 'rc[0-9]+' | sed 's/rc//' || true)
 # Check if current branch is protected
 define check_protected_branch
 	@current_branch=$$(git rev-parse --abbrev-ref HEAD); \
