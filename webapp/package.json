@@ -14,7 +14,7 @@
     "lucide-react": "1.8.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.4.13",
     "@mattermost/client": "11.6.0",
     "@mattermost/types": "11.6.0",
     "@types/node": "25.6.0",
