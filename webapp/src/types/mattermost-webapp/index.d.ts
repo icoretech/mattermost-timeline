@@ -3,13 +3,12 @@
 
 /* eslint-disable max-lines */
 
-import type { Reducer } from "redux";
-
 import type { BaseWebSocketMessage } from "@mattermost/client";
 import type { Channel } from "@mattermost/types/channels";
 import type { FileInfo } from "@mattermost/types/files";
 import type { Post, PostEmbed } from "@mattermost/types/posts";
 import type { ProductScope } from "@mattermost/types/products";
+import type { Reducer } from "redux";
 
 export type UniqueIdentifier = string;
 export type ReactResolvable = React.ReactNode | React.ElementType;
