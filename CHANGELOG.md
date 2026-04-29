@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.4.0](https://github.com/icoretech/mattermost-timeline/compare/v1.3.5...v1.4.0) (2026-04-29)
+
+
+### Features
+
+* **webapp:** reuse hydrated rhs context ([4c8cbf4](https://github.com/icoretech/mattermost-timeline/commit/4c8cbf4007cdf8c209a3823c07028053ba6284c2))
+* **webapp:** store popout timeline state ([ca56d4d](https://github.com/icoretech/mattermost-timeline/commit/ca56d4dea661d1a849419cda5ac4eb1ed3ece8ae))
+* **webapp:** sync rhs popout windows ([6f3f1eb](https://github.com/icoretech/mattermost-timeline/commit/6f3f1ebad54e294fac3947be12a2d2e4743fd336))
+
+
+### Bug Fixes
+
+* **build:** align manual release branch with main ([6a3e45e](https://github.com/icoretech/mattermost-timeline/commit/6a3e45e988a689c357bf90953c5fc5c73c07ca09))
+* **build:** avoid tag warnings on non-release targets ([bb12a0f](https://github.com/icoretech/mattermost-timeline/commit/bb12a0f49f8c18b6040334576bce63ab87470bb5))
+* **build:** emit biome-stable webapp manifest ([b402ba0](https://github.com/icoretech/mattermost-timeline/commit/b402ba01b8956f5a554ee2a464206d0edd30626a))
+* **deps:** update dependency lucide-react to v1.11.0 ([7491f3d](https://github.com/icoretech/mattermost-timeline/commit/7491f3d6e1861f4d6f2ddd73968a3c221e278b9f))
+* **deps:** update dependency lucide-react to v1.12.0 ([#58](https://github.com/icoretech/mattermost-timeline/issues/58)) ([b5c439f](https://github.com/icoretech/mattermost-timeline/commit/b5c439fcb5416ba5e39ab92aa8d7a9b0e468648a))
+* **deps:** update dependency lucide-react to v1.14.0 ([#59](https://github.com/icoretech/mattermost-timeline/issues/59)) ([55bb552](https://github.com/icoretech/mattermost-timeline/commit/55bb55255e4ed12f33d01e782ad230ef6e874a95))
+* **deps:** update dependency lucide-react to v1.9.0 ([#55](https://github.com/icoretech/mattermost-timeline/issues/55)) ([2531c6c](https://github.com/icoretech/mattermost-timeline/commit/2531c6c4b4abf3d0d4a67aefa85daf45b4dbb6b0))
+* **deps:** update module github.com/mattermost/mattermost/server/public to v0.3.1 ([#46](https://github.com/icoretech/mattermost-timeline/issues/46)) ([7c76998](https://github.com/icoretech/mattermost-timeline/commit/7c769981445187df73a916bcab0a0054d0e040f6))
+* **release:** make asset uploads idempotent ([c316c43](https://github.com/icoretech/mattermost-timeline/commit/c316c43c1521494de26cc38a8362963ccb07f616))
+* **webapp:** declare scss imports for future ts upgrades ([088a6f5](https://github.com/icoretech/mattermost-timeline/commit/088a6f50febf6792d569c3b44a6f44fd669a0887))
+* **webapp:** load Vite config as native ESM ([1de6375](https://github.com/icoretech/mattermost-timeline/commit/1de6375e77f79a1c0c2f389821bd740d8db9bf07))
+* **webapp:** satisfy biome 2.4.13 import sorting ([2ee68f1](https://github.com/icoretech/mattermost-timeline/commit/2ee68f1f582dbda4198e96cf3421a779ba00453c))
+
 ## [1.3.5](https://github.com/icoretech/mattermost-timeline/compare/v1.3.4...v1.3.5) (2026-04-09)
 
 
