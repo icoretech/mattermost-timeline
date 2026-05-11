@@ -130,6 +130,8 @@ github.com/mattermost/mattermost/server/public v0.3.0 h1:AtzCjypbLcvSVQZMg0vKWL5
 github.com/mattermost/mattermost/server/public v0.3.0/go.mod h1:QnF/1Evlh7e3G8ifwut7Q5Joy/t4oHYNcDoyBTYuXho=
 github.com/mattermost/mattermost/server/public v0.3.1 h1:yKHRtDpyRQvHDhsWijASgEZxAWDsJYhn0SGygsE/RRs=
 github.com/mattermost/mattermost/server/public v0.3.1/go.mod h1:QnF/1Evlh7e3G8ifwut7Q5Joy/t4oHYNcDoyBTYuXho=
+github.com/mattermost/mattermost/server/public v0.4.0 h1:DtD89e3zvuWXdAPr3MbyEk6+EA59FySGbnHQ8o0S92Q=
+github.com/mattermost/mattermost/server/public v0.4.0/go.mod h1:VWtRZ9s/69vsoDCJ+4AHqB5VuaLk6gjS08NIuQgCAsk=
 github.com/mattermost/mattermost/server/v8 v8.0.0-20260319165039-d5fdc1f534ff h1:Psl9P9P0D8xTTka4n+rtJtzCP+6p4U6jTdjFLeajZNE=
 github.com/mattermost/mattermost/server/v8 v8.0.0-20260319165039-d5fdc1f534ff/go.mod h1:gZkkhOCR5LPaDPopeq76bCoHO/zHp/kdHKKWipMJGH0=
 github.com/mattermost/xml-roundtrip-validator v0.1.0 h1:RXbVD2UAl7A7nOTR4u7E3ILa4IbtvKBHw64LDsmu9hU=
