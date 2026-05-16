@@ -1,0 +1,10 @@
+[
+  { "icon": "eyes", "label": "I've seen this" },
+  { "icon": "wrench", "label": "Working on it" },
+  { "icon": "check", "label": "Handled" },
+  { "icon": "megaphone", "label": "Needs attention" },
+  { "icon": "thumbs-up", "label": "Acknowledged" },
+  { "icon": "hand", "label": "I'll take this" },
+  { "icon": "party", "label": "Celebrate" },
+  { "icon": "heart", "label": "Appreciate" }
+]

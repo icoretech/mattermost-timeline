@@ -22,26 +22,57 @@ type ReactionClientSummary struct {
 	RecentUsers []string `json:"recent_users"`
 }
 
-// AllowedReactions is the set of valid reaction icon names.
-var AllowedReactions = map[string]bool{
-	"eyes": true, "wrench": true, "check": true, "megaphone": true,
-	"thumbs-up": true, "hand": true, "party": true, "heart": true,
+type TimelineOrder string
+
+const (
+	TimelineOrderOldestFirst TimelineOrder = "oldest_first"
+	TimelineOrderNewestFirst TimelineOrder = "newest_first"
+)
+
+var allowedReactionIcons = []string{"eyes", "wrench", "check", "megaphone", "thumbs-up", "hand", "party", "heart"}
+
+var allowedReactionIconSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(allowedReactionIcons))
+	for _, icon := range allowedReactionIcons {
+		set[icon] = struct{}{}
+	}
+	return set
+}()
+
+func isAllowedReaction(icon string) bool {
+	_, ok := allowedReactionIconSet[icon]
+	return ok
 }
 
 // Event represents a single event in the timeline.
 type Event struct {
-	ID              string                          `json:"id"`
-	TeamID          string                          `json:"team_id"`
-	Timestamp       int64                           `json:"timestamp"`
-	Title           string                          `json:"title"`
-	Message         string                          `json:"message,omitempty"`
-	Link            string                          `json:"link,omitempty"`
-	Links           []EventLink                     `json:"links,omitempty"`
-	EventType       string                          `json:"event_type"`
-	Source          string                          `json:"source,omitempty"`
-	ExternalID      string                          `json:"external_id,omitempty"`
-	Reactions       EventReactions                  `json:"reactions,omitempty"`
-	Channels        []string                        `json:"channels,omitempty"`
+	ID         string         `json:"id"`
+	TeamID     string         `json:"team_id"`
+	Timestamp  int64          `json:"timestamp"`
+	Title      string         `json:"title"`
+	Message    string         `json:"message,omitempty"`
+	Link       string         `json:"link,omitempty"`
+	Links      []EventLink    `json:"links,omitempty"`
+	EventType  string         `json:"event_type"`
+	Source     string         `json:"source,omitempty"`
+	ExternalID string         `json:"external_id,omitempty"`
+	Reactions  EventReactions `json:"reactions,omitempty"`
+	Channels   []string       `json:"channels,omitempty"`
+}
+
+// ClientEvent is the timeline event shape exposed over HTTP and WebSocket APIs.
+type ClientEvent struct {
+	ID              string                           `json:"id"`
+	TeamID          string                           `json:"team_id"`
+	Timestamp       int64                            `json:"timestamp"`
+	Title           string                           `json:"title"`
+	Message         string                           `json:"message,omitempty"`
+	Link            string                           `json:"link,omitempty"`
+	Links           []EventLink                      `json:"links,omitempty"`
+	EventType       string                           `json:"event_type"`
+	Source          string                           `json:"source,omitempty"`
+	ExternalID      string                           `json:"external_id,omitempty"`
+	Channels        []string                         `json:"channels,omitempty"`
 	ClientReactions map[string]ReactionClientSummary `json:"client_reactions,omitempty"`
 }
 
@@ -60,16 +91,47 @@ type WebhookPayload struct {
 
 // EventsResponse is returned by the GET /api/v1/events endpoint.
 type EventsResponse struct {
-	Events          []Event `json:"events"`
-	Total           int     `json:"total"`
-	TimelineOrder   string  `json:"timeline_order"`
-	EnableReactions bool    `json:"enable_reactions"`
+	Events          []ClientEvent `json:"events"`
+	Total           int           `json:"total"`
+	TimelineOrder   TimelineOrder `json:"timeline_order"`
+	EnableReactions bool          `json:"enable_reactions"`
+}
+
+func clientEventFrom(event Event, currentUserID string) ClientEvent {
+	return ClientEvent{
+		ID:              event.ID,
+		TeamID:          event.TeamID,
+		Timestamp:       event.Timestamp,
+		Title:           event.Title,
+		Message:         event.Message,
+		Link:            event.Link,
+		Links:           event.Links,
+		EventType:       event.EventType,
+		Source:          event.Source,
+		ExternalID:      event.ExternalID,
+		Channels:        event.Channels,
+		ClientReactions: event.Reactions.ToClientSummaries(currentUserID),
+	}
+}
+
+func webhookEventResponseFrom(event Event) ClientEvent {
+	clientEvent := clientEventFrom(event, "")
+	clientEvent.ClientReactions = nil
+	return clientEvent
+}
+
+func clientEventsFrom(events []Event, currentUserID string) []ClientEvent {
+	clientEvents := make([]ClientEvent, len(events))
+	for i, event := range events {
+		clientEvents[i] = clientEventFrom(event, currentUserID)
+	}
+	return clientEvents
 }
 
 // ToClientSummaries converts full reaction data to lightweight client format.
 func (r EventReactions) ToClientSummaries(currentUserID string) map[string]ReactionClientSummary {
 	if len(r) == 0 {
-		return nil
+		return map[string]ReactionClientSummary{}
 	}
 	result := make(map[string]ReactionClientSummary, len(r))
 	for icon, summary := range r {

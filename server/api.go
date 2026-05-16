@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -76,142 +77,159 @@ func mergeLinks(existing, incoming []EventLink) []EventLink {
 
 const maxWebhookBodyBytes = 256 * 1024
 
+type validatedWebhookRequest struct {
+	teamID        string
+	payload       WebhookPayload
+	eventType     string
+	incomingLinks []EventLink
+}
+
+type storedWebhookEvent struct {
+	event     Event
+	status    int
+	eventName string
+}
+
+type webhookHandlerError struct {
+	message string
+	status  int
+}
+
 func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
-
-	// Validate webhook secret
-	if config.WebhookSecret == "" {
-		http.Error(w, "Webhook secret not configured", http.StatusInternalServerError)
+	validated, handlerErr := p.validateWebhookRequest(w, r, config)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
 		return
+	}
+
+	stored, handlerErr := p.storeWebhookEvent(validated)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	p.publishAndWriteTimelineEventResponse(w, stored.status, stored.eventName, stored.event)
+}
+
+func (p *Plugin) validateWebhookRequest(w http.ResponseWriter, r *http.Request, config *configuration) (validatedWebhookRequest, *webhookHandlerError) {
+	if config.WebhookSecret == "" {
+		return validatedWebhookRequest{}, &webhookHandlerError{message: "Webhook secret not configured", status: http.StatusInternalServerError}
 	}
 
 	secret := r.Header.Get("X-Webhook-Secret")
 	if secret != config.WebhookSecret {
-		http.Error(w, "Invalid webhook secret", http.StatusUnauthorized)
-		return
+		return validatedWebhookRequest{}, &webhookHandlerError{message: "Invalid webhook secret", status: http.StatusUnauthorized}
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes)
 
-	// Parse payload
 	var payload WebhookPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		if strings.Contains(err.Error(), "http: request body too large") {
-			http.Error(w, "Payload too large", http.StatusRequestEntityTooLarge)
-			return
+			return validatedWebhookRequest{}, &webhookHandlerError{message: "Payload too large", status: http.StatusRequestEntityTooLarge}
 		}
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-		return
+		return validatedWebhookRequest{}, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
 	}
 
 	if payload.Title == "" {
-		http.Error(w, "Title is required", http.StatusBadRequest)
-		return
+		return validatedWebhookRequest{}, &webhookHandlerError{message: "Title is required", status: http.StatusBadRequest}
 	}
 
-	// Determine team ID from query param or payload
 	teamID := r.URL.Query().Get("team_id")
 	if teamID == "" {
 		teamID = payload.TeamID
 	}
 	if teamID == "" {
-		http.Error(w, "team_id is required (query param or JSON field)", http.StatusBadRequest)
-		return
+		return validatedWebhookRequest{}, &webhookHandlerError{message: "team_id is required (query param or JSON field)", status: http.StatusBadRequest}
 	}
 
-	// Default event type
 	eventType := payload.EventType
 	if eventType == "" {
 		eventType = "generic"
 	}
 
-	// Validate channels
 	if len(payload.Channels) > maxChannelsPerEvent {
-		http.Error(w, fmt.Sprintf("Maximum %d channels per event", maxChannelsPerEvent), http.StatusBadRequest)
-		return
+		return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("Maximum %d channels per event", maxChannelsPerEvent), status: http.StatusBadRequest}
 	}
 	for _, chID := range payload.Channels {
 		ch, appErr := p.API.GetChannel(chID)
 		if appErr != nil {
-			http.Error(w, fmt.Sprintf("Invalid channel ID: %s", chID), http.StatusBadRequest)
-			return
+			return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("Invalid channel ID: %s", chID), status: http.StatusBadRequest}
 		}
 		if ch.TeamId != teamID {
-			http.Error(w, fmt.Sprintf("Channel %s does not belong to team %s", chID, teamID), http.StatusBadRequest)
-			return
+			return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("Channel %s does not belong to team %s", chID, teamID), status: http.StatusBadRequest}
 		}
 		if ch.Type == model.ChannelTypeDirect || ch.Type == model.ChannelTypeGroup {
-			http.Error(w, fmt.Sprintf("DM/GM channels are not supported: %s", chID), http.StatusBadRequest)
-			return
+			return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("DM/GM channels are not supported: %s", chID), status: http.StatusBadRequest}
 		}
 	}
 
-	incomingLinks := normalizeLinks(payload)
+	return validatedWebhookRequest{
+		teamID:        teamID,
+		payload:       payload,
+		eventType:     eventType,
+		incomingLinks: normalizeLinks(payload),
+	}, nil
+}
 
-	// Check for existing event via external_id
-	if payload.ExternalID != "" {
-		existingID, err := p.store.LookupByExternalID(teamID, payload.ExternalID)
+func (p *Plugin) storeWebhookEvent(request validatedWebhookRequest) (storedWebhookEvent, *webhookHandlerError) {
+	if request.payload.ExternalID != "" {
+		existingID, err := p.store.LookupByExternalID(request.teamID, request.payload.ExternalID)
 		if err != nil {
 			p.API.LogError("Failed to lookup external ID", "error", err.Error())
+			return storedWebhookEvent{}, &webhookHandlerError{message: "Failed to lookup external ID", status: http.StatusInternalServerError}
 		}
 
 		if existingID != "" {
 			existing, err := p.store.GetEvent(existingID)
 			if err != nil {
 				p.API.LogError("Failed to get existing event", "error", err.Error())
+				return storedWebhookEvent{}, &webhookHandlerError{message: "Failed to get existing event", status: http.StatusInternalServerError}
+			}
+			if existing == nil {
+				p.API.LogError("External ID mapping points to missing event", "event_id", existingID)
+				return storedWebhookEvent{}, &webhookHandlerError{message: "Failed to get existing event", status: http.StatusInternalServerError}
 			}
 
-			if existing != nil {
-				oldChannels := existing.Channels
+			oldChannels := applyWebhookUpdate(existing, request.payload, request.eventType, request.incomingLinks)
 
-				// Update existing event: replace fields, aggregate links
-				existing.Title = payload.Title
-				existing.Message = payload.Message
-				existing.EventType = eventType
-				existing.Source = payload.Source
-				existing.Timestamp = time.Now().UnixMilli()
-				existing.Links = mergeLinks(existing.Links, incomingLinks)
-				existing.Channels = payload.Channels
-
-				if err := p.store.UpdateEvent(teamID, oldChannels, *existing); err != nil {
-					p.API.LogError("Failed to update event", "error", err.Error())
-					http.Error(w, "Failed to update event", http.StatusInternalServerError)
-					return
-				}
-
-				eventJSON, err := json.Marshal(existing)
-				if err != nil {
-					p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
-					http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
-					return
-				}
-
-				if len(existing.Channels) > 0 {
-					for _, chID := range existing.Channels {
-						p.API.PublishWebSocketEvent("updated_event", map[string]interface{}{
-							"event": string(eventJSON),
-						}, &model.WebsocketBroadcast{
-							ChannelId: chID,
-						})
-					}
-				} else {
-					p.API.PublishWebSocketEvent("updated_event", map[string]interface{}{
-						"event": string(eventJSON),
-					}, &model.WebsocketBroadcast{
-						TeamId: teamID,
-					})
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(eventJSON)
-				return
+			if err := p.store.UpdateEvent(request.teamID, oldChannels, *existing); err != nil {
+				p.API.LogError("Failed to update event", "error", err.Error())
+				return storedWebhookEvent{}, &webhookHandlerError{message: "Failed to update event", status: http.StatusInternalServerError}
 			}
+
+			return storedWebhookEvent{event: *existing, status: http.StatusOK, eventName: "updated_event"}, nil
 		}
 	}
 
-	// New event
-	event := Event{
+	event := newWebhookEvent(request.teamID, request.payload, request.eventType, request.incomingLinks)
+
+	if err := p.store.AddEvent(request.teamID, event); err != nil {
+		if errors.Is(err, errExternalIDAlreadyExists) {
+			return storedWebhookEvent{}, &webhookHandlerError{message: "External ID already exists", status: http.StatusConflict}
+		}
+		p.API.LogError("Failed to store event", "error", err.Error())
+		return storedWebhookEvent{}, &webhookHandlerError{message: "Failed to store event", status: http.StatusInternalServerError}
+	}
+
+	return storedWebhookEvent{event: event, status: http.StatusCreated, eventName: "new_event"}, nil
+}
+
+func applyWebhookUpdate(existing *Event, payload WebhookPayload, eventType string, incomingLinks []EventLink) []string {
+	oldChannels := existing.Channels
+	existing.Title = payload.Title
+	existing.Message = payload.Message
+	existing.EventType = eventType
+	existing.Source = payload.Source
+	existing.Timestamp = time.Now().UnixMilli()
+	existing.Links = mergeLinks(existing.Links, incomingLinks)
+	existing.Channels = payload.Channels
+	return oldChannels
+}
+
+func newWebhookEvent(teamID string, payload WebhookPayload, eventType string, incomingLinks []EventLink) Event {
+	return Event{
 		ID:         uuid.New().String(),
 		TeamID:     teamID,
 		Timestamp:  time.Now().UnixMilli(),
@@ -223,40 +241,28 @@ func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		ExternalID: payload.ExternalID,
 		Channels:   payload.Channels,
 	}
+}
 
-	if err := p.store.AddEvent(teamID, event); err != nil {
-		p.API.LogError("Failed to store event", "error", err.Error())
-		http.Error(w, "Failed to store event", http.StatusInternalServerError)
-		return
-	}
-
-	// Broadcast via WebSocket to team members
-	eventJSON, err := json.Marshal(event)
+func (p *Plugin) publishAndWriteTimelineEventResponse(w http.ResponseWriter, status int, eventName string, event Event) {
+	websocketJSON, err := json.Marshal(clientEventFrom(event, ""))
 	if err != nil {
 		p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
 		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
 		return
 	}
 
-	if len(event.Channels) > 0 {
-		for _, chID := range event.Channels {
-			p.API.PublishWebSocketEvent("new_event", map[string]interface{}{
-				"event": string(eventJSON),
-			}, &model.WebsocketBroadcast{
-				ChannelId: chID,
-			})
-		}
-	} else {
-		p.API.PublishWebSocketEvent("new_event", map[string]interface{}{
-			"event": string(eventJSON),
-		}, &model.WebsocketBroadcast{
-			TeamId: teamID,
-		})
+	responseJSON, err := json.Marshal(webhookEventResponseFrom(event))
+	if err != nil {
+		p.API.LogError("Failed to marshal webhook event response", "error", err.Error())
+		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
+		return
 	}
 
+	p.publishTimelineEvent(eventName, event, websocketJSON)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write(eventJSON)
+	w.WriteHeader(status)
+	_, _ = w.Write(responseJSON)
 }
 
 func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
@@ -276,14 +282,34 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 
 	config := p.getConfiguration()
 
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	offsetParam := r.URL.Query().Get("offset")
+	offset := 0
+	if offsetParam != "" {
+		parsedOffset, err := strconv.Atoi(offsetParam)
+		if err != nil {
+			http.Error(w, "offset must be an integer", http.StatusBadRequest)
+			return
+		}
+		offset = parsedOffset
+	}
 	if offset < 0 {
 		http.Error(w, "offset must be non-negative", http.StatusBadRequest)
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 50
+
+	limitParam := r.URL.Query().Get("limit")
+	limit := 50
+	if limitParam != "" {
+		parsedLimit, err := strconv.Atoi(limitParam)
+		if err != nil {
+			http.Error(w, "limit must be an integer", http.StatusBadRequest)
+			return
+		}
+		if parsedLimit <= 0 {
+			http.Error(w, "limit must be positive", http.StatusBadRequest)
+			return
+		}
+		limit = parsedLimit
 	}
 	if maxDisplay := config.maxEventsDisplayedInt(); limit > maxDisplay {
 		limit = maxDisplay
@@ -313,16 +339,8 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Transform reactions to client summaries for the response
-	for i := range events {
-		if events[i].Reactions != nil {
-			events[i].ClientReactions = events[i].Reactions.ToClientSummaries(userID)
-			events[i].Reactions = nil // don't send full user_ids list to client
-		}
-	}
-
 	resp := EventsResponse{
-		Events:          events,
+		Events:          clientEventsFrom(events, userID),
 		Total:           total,
 		TimelineOrder:   config.timelineOrder(),
 		EnableReactions: config.enableReactions(),
@@ -331,224 +349,5 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		p.API.LogError("Failed to encode events response", "error", err.Error())
-	}
-}
-
-func (p *Plugin) handleAddReaction(w http.ResponseWriter, r *http.Request) {
-	config := p.getConfiguration()
-	if !config.enableReactions() {
-		http.Error(w, "Reactions are disabled", http.StatusForbidden)
-		return
-	}
-
-	vars := mux.Vars(r)
-	eventID := vars["eventId"]
-	icon := vars["icon"]
-
-	if !AllowedReactions[icon] {
-		http.Error(w, "Invalid reaction icon", http.StatusBadRequest)
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-
-	event, err := p.store.GetEvent(eventID)
-	if err != nil || event == nil {
-		http.Error(w, "Event not found", http.StatusNotFound)
-		return
-	}
-
-	if _, appErr := p.API.GetTeamMember(event.TeamID, userID); appErr != nil {
-		http.Error(w, "Not a member of this team", http.StatusForbidden)
-		return
-	}
-
-	if len(event.Channels) > 0 {
-		isMember := false
-		for _, chID := range event.Channels {
-			if _, appErr := p.API.GetChannelMember(chID, userID); appErr == nil {
-				isMember = true
-				break
-			}
-		}
-		if !isMember {
-			http.Error(w, "Not a member of the event's channel", http.StatusForbidden)
-			return
-		}
-	}
-
-	updated, err := p.store.AddReaction(eventID, icon, userID)
-	if err != nil {
-		p.API.LogError("Failed to add reaction", "error", err.Error())
-		http.Error(w, "Failed to add reaction", http.StatusInternalServerError)
-		return
-	}
-
-	summary := updated.Reactions[icon]
-	reactionJSON, _ := json.Marshal(map[string]interface{}{
-		"event_id": eventID,
-		"icon":     icon,
-		"count":    summary.Count,
-		"user_ids": summary.UserIDs,
-	})
-
-	if len(updated.Channels) > 0 {
-		for _, chID := range updated.Channels {
-			p.API.PublishWebSocketEvent("reaction_updated", map[string]interface{}{
-				"payload": string(reactionJSON),
-			}, &model.WebsocketBroadcast{
-				ChannelId: chID,
-			})
-		}
-	} else {
-		p.API.PublishWebSocketEvent("reaction_updated", map[string]interface{}{
-			"payload": string(reactionJSON),
-		}, &model.WebsocketBroadcast{
-			TeamId: updated.TeamID,
-		})
-	}
-
-	clientReactions := updated.Reactions.ToClientSummaries(userID)
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(clientReactions); err != nil {
-		p.API.LogError("Failed to encode reactions response", "error", err.Error())
-	}
-}
-
-func (p *Plugin) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
-	config := p.getConfiguration()
-	if !config.enableReactions() {
-		http.Error(w, "Reactions are disabled", http.StatusForbidden)
-		return
-	}
-
-	vars := mux.Vars(r)
-	eventID := vars["eventId"]
-	icon := vars["icon"]
-
-	if !AllowedReactions[icon] {
-		http.Error(w, "Invalid reaction icon", http.StatusBadRequest)
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-
-	event, err := p.store.GetEvent(eventID)
-	if err != nil || event == nil {
-		http.Error(w, "Event not found", http.StatusNotFound)
-		return
-	}
-
-	if _, appErr := p.API.GetTeamMember(event.TeamID, userID); appErr != nil {
-		http.Error(w, "Not a member of this team", http.StatusForbidden)
-		return
-	}
-
-	if len(event.Channels) > 0 {
-		isMember := false
-		for _, chID := range event.Channels {
-			if _, appErr := p.API.GetChannelMember(chID, userID); appErr == nil {
-				isMember = true
-				break
-			}
-		}
-		if !isMember {
-			http.Error(w, "Not a member of the event's channel", http.StatusForbidden)
-			return
-		}
-	}
-
-	updated, err := p.store.RemoveReaction(eventID, icon, userID)
-	if err != nil {
-		p.API.LogError("Failed to remove reaction", "error", err.Error())
-		http.Error(w, "Failed to remove reaction", http.StatusInternalServerError)
-		return
-	}
-
-	var broadcastUserIDs []string
-	count := 0
-	if summary, ok := updated.Reactions[icon]; ok {
-		broadcastUserIDs = summary.UserIDs
-		count = summary.Count
-	}
-	reactionJSON, _ := json.Marshal(map[string]interface{}{
-		"event_id": eventID,
-		"icon":     icon,
-		"count":    count,
-		"user_ids": broadcastUserIDs,
-	})
-
-	if len(updated.Channels) > 0 {
-		for _, chID := range updated.Channels {
-			p.API.PublishWebSocketEvent("reaction_updated", map[string]interface{}{
-				"payload": string(reactionJSON),
-			}, &model.WebsocketBroadcast{
-				ChannelId: chID,
-			})
-		}
-	} else {
-		p.API.PublishWebSocketEvent("reaction_updated", map[string]interface{}{
-			"payload": string(reactionJSON),
-		}, &model.WebsocketBroadcast{
-			TeamId: updated.TeamID,
-		})
-	}
-
-	clientReactions := updated.Reactions.ToClientSummaries(userID)
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(clientReactions); err != nil {
-		p.API.LogError("Failed to encode reactions response", "error", err.Error())
-	}
-}
-
-func (p *Plugin) handleGetReactionUsers(w http.ResponseWriter, r *http.Request) {
-	config := p.getConfiguration()
-	if !config.enableReactions() {
-		http.Error(w, "Reactions are disabled", http.StatusForbidden)
-		return
-	}
-
-	vars := mux.Vars(r)
-	eventID := vars["eventId"]
-	icon := vars["icon"]
-
-	userID := r.Header.Get("Mattermost-User-ID")
-
-	event, err := p.store.GetEvent(eventID)
-	if err != nil || event == nil {
-		http.Error(w, "Event not found", http.StatusNotFound)
-		return
-	}
-
-	if _, appErr := p.API.GetTeamMember(event.TeamID, userID); appErr != nil {
-		http.Error(w, "Not a member of this team", http.StatusForbidden)
-		return
-	}
-
-	if len(event.Channels) > 0 {
-		isMember := false
-		for _, chID := range event.Channels {
-			if _, appErr := p.API.GetChannelMember(chID, userID); appErr == nil {
-				isMember = true
-				break
-			}
-		}
-		if !isMember {
-			http.Error(w, "Not a member of the event's channel", http.StatusForbidden)
-			return
-		}
-	}
-
-	userIDs, err := p.store.GetReactionUsers(eventID, icon)
-	if err != nil {
-		http.Error(w, "Failed to get reaction users", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"user_ids": userIDs,
-	}); err != nil {
-		p.API.LogError("Failed to encode reaction users response", "error", err.Error())
 	}
 }

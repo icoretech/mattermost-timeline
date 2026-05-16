@@ -13,11 +13,13 @@ type configuration struct {
 	EnableReactions    bool   `json:"EnableReactions"`
 }
 
-func (c *configuration) timelineOrder() string {
-	if c.TimelineOrder == "newest_first" || c.TimelineOrder == "oldest_first" {
-		return c.TimelineOrder
+func (c *configuration) timelineOrder() TimelineOrder {
+	switch TimelineOrder(c.TimelineOrder) {
+	case TimelineOrderNewestFirst, TimelineOrderOldestFirst:
+		return TimelineOrder(c.TimelineOrder)
+	default:
+		return TimelineOrderOldestFirst
 	}
-	return "oldest_first"
 }
 
 func (c *configuration) enableReactions() bool {
