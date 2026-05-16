@@ -164,25 +164,93 @@ cd webapp && npm run biome:ci
 cd webapp && npm run typecheck
 ```
 
-### Deploy to a local Mattermost instance
+### Deploy to a Mattermost instance
 
 ```bash
 make deploy
 ```
 
-## Releases
+`make deploy` builds the plugin bundle, uploads it to Mattermost, and enables it.
+The command uses the Mattermost plugin helper in `build/pluginctl`.
 
-This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Merging to `main` creates a release PR that, when merged, publishes a signed GitHub release with the plugin bundle attached.
+For a local development server with Mattermost local mode enabled, the helper uses
+the local mode Unix socket automatically. Override the socket path when needed:
 
-### Maintainer prerequisites
+```bash
+export MM_LOCALSOCKETPATH=/path/to/mattermost_local.socket
+make deploy
+```
 
-The automated release workflow depends on a few repository-level prerequisites:
+For a remote server or any environment without local mode, authenticate over the
+Mattermost REST API:
 
-- `GPG_PRIVATE_KEY` must be configured in GitHub Actions secrets with the armored private key that matches [`assets/signing-key.asc`](assets/signing-key.asc)
-- the release workflow must be allowed to use the default `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`
-- rerunning a release job will replace existing assets on the same tag, so the uploaded `.tar.gz` and `.tar.gz.sig` stay in sync
+```bash
+export MM_SERVICESETTINGS_SITEURL=https://mattermost.example.com
+export MM_ADMIN_TOKEN='personal-access-token'
+make deploy
+```
 
-If you rotate the signing key, update both the GitHub secret and `assets/signing-key.asc` in the repository so user verification instructions stay correct.
+`MM_ADMIN_TOKEN` must be the personal access token value, not the token ID shown
+later in the Mattermost UI. Mattermost only shows the token value once when it is
+created. If the value was not saved, revoke the old token and create a new one.
+
+Username/password authentication is also supported:
+
+```bash
+export MM_SERVICESETTINGS_SITEURL=https://mattermost.example.com
+export MM_ADMIN_USERNAME='admin@example.com'
+export MM_ADMIN_PASSWORD='password'
+make deploy
+```
+
+The target server must allow plugin uploads. The generated bundle is written to
+`dist/ch.icorete.mattermost-timeline-<version>.tar.gz`, and the deploy step uses
+the plugin ID `ch.icorete.mattermost-timeline`.
+
+### Verify a deployment
+
+Check that Mattermost sees the plugin as active:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $MM_ADMIN_TOKEN" \
+  "$MM_SERVICESETTINGS_SITEURL/api/v4/plugins" |
+  jq '.active[] | select(.id == "ch.icorete.mattermost-timeline") | {id, name, version}'
+```
+
+Then send a small webhook event and read it back through the plugin API. Keep the
+webhook secret in your password manager or deployment secret store; Mattermost
+redacts secret plugin settings in API responses, so do not rely on the config API
+to recover it later.
+
+```bash
+export TEAM_ID='team-id'
+export CHANNEL_ID='' # optional; set for a channel-scoped event
+export WEBHOOK_SECRET='configured-webhook-secret'
+export EXTERNAL_ID="timeline-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
+
+jq -n \
+  --arg external_id "$EXTERNAL_ID" \
+  --arg channel_id "$CHANNEL_ID" \
+  '{
+    title: "Timeline smoke test",
+    message: "Deployment smoke test.",
+    event_type: "info",
+    source: "smoke-test",
+    external_id: $external_id,
+    channels: (if $channel_id == "" then [] else [$channel_id] end)
+  }' |
+  curl -sS -X POST \
+    "$MM_SERVICESETTINGS_SITEURL/plugins/ch.icorete.mattermost-timeline/webhook?team_id=$TEAM_ID" \
+    -H "Content-Type: application/json" \
+    -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
+    --data-binary @-
+
+curl -sS \
+  -H "Authorization: Bearer $MM_ADMIN_TOKEN" \
+  "$MM_SERVICESETTINGS_SITEURL/plugins/ch.icorete.mattermost-timeline/api/v1/events?team_id=$TEAM_ID&channel_id=$CHANNEL_ID&limit=10" |
+  jq --arg external_id "$EXTERNAL_ID" '.events[] | select(.external_id == $external_id)'
+```
 
 ## Security
 
