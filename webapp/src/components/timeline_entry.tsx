@@ -20,7 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
-import type { EventEntry, EventLink, TimelineUser } from "../types";
+import type { EventEntry, EventLink, TimelineUser } from "../types/timeline";
 import ReactionBar from "./reaction_bar";
 
 interface Props {

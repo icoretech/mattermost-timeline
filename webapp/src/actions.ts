@@ -1,61 +1,219 @@
 import type { Dispatch } from "redux";
 
 import manifest from "./manifest";
+import {
+  isEventEntry,
+  isReactionSummaryMap,
+  isRecord,
+  isStringArray,
+  isTimelineOrder,
+} from "./timeline_validation";
 
 import type {
   EventEntry,
   EventFeedState,
   ReactionClientSummary,
-  ReactionUpdatedWebSocketMessage,
-} from "./types";
+} from "./types/timeline";
 
-export const RECEIVED_EVENTS = `${manifest.id}_received_events`;
-export const RECEIVED_NEW_EVENT = `${manifest.id}_received_new_event`;
-export const RECEIVED_UPDATED_EVENT = `${manifest.id}_received_updated_event`;
-export const CLEAR_NEW_EVENT_FLAG = `${manifest.id}_clear_new_event_flag`;
-export const CLEAR_UPDATED_EVENT_FLAG = `${manifest.id}_clear_updated_event_flag`;
-export const SET_LOADING = `${manifest.id}_set_loading`;
-export const SET_ERROR = `${manifest.id}_set_error`;
-export const RECEIVED_REACTION_UPDATED = `${manifest.id}_received_reaction_updated`;
-export const OPTIMISTIC_REACTION = `${manifest.id}_optimistic_reaction`;
-export const CLEAR_EVENTS = `${manifest.id}_clear_events`;
-export const SET_CURRENT_USER_ID = `${manifest.id}_set_current_user_id`;
-export const SET_VIEW_CONTEXT = `${manifest.id}_set_view_context`;
-export const HYDRATE_POPOUT_STATE = `${manifest.id}_hydrate_popout_state`;
+const pluginId = manifest.id as "ch.icorete.mattermost-timeline";
 
-export interface EventFeedAction {
-  type: string;
-  events?: EventEntry[];
-  total?: number;
+function actionType<const Suffix extends string>(
+  suffix: Suffix,
+): `${typeof pluginId}_${Suffix}` {
+  return `${pluginId}_${suffix}`;
+}
+
+export const RECEIVED_EVENTS = actionType("received_events");
+export const RECEIVED_NEW_EVENT = actionType("received_new_event");
+export const RECEIVED_UPDATED_EVENT = actionType("received_updated_event");
+export const CLEAR_NEW_EVENT_FLAG = actionType("clear_new_event_flag");
+export const CLEAR_UPDATED_EVENT_FLAG = actionType("clear_updated_event_flag");
+export const SET_LOADING = actionType("set_loading");
+export const SET_ERROR = actionType("set_error");
+export const RECEIVED_REACTION_UPDATED = actionType(
+  "received_reaction_updated",
+);
+export const RECEIVED_EVENT_REACTIONS = actionType("received_event_reactions");
+export const OPTIMISTIC_REACTION = actionType("optimistic_reaction");
+export const CLEAR_EVENTS = actionType("clear_events");
+export const SET_CURRENT_USER_ID = actionType("set_current_user_id");
+export const SET_VIEW_CONTEXT = actionType("set_view_context");
+export const HYDRATE_POPOUT_STATE = actionType("hydrate_popout_state");
+
+export type TimelineOrder = EventFeedState["timelineOrder"];
+
+export type ReceivedEventsAction = {
+  type: typeof RECEIVED_EVENTS;
+  events: EventEntry[];
+  total: number;
   append?: boolean;
-  event?: EventEntry;
-  eventId?: string;
-  loading?: boolean;
-  error?: string | null;
-  timelineOrder?: string;
+  timelineOrder?: TimelineOrder;
   enableReactions?: boolean;
-  currentUserId?: string;
   teamId?: string;
   channelId?: string;
-  hydratedState?: EventFeedState;
-  event_id?: string;
-  icon?: string;
-  count?: number;
-  user_ids?: string[];
-  optimisticAction?: "add" | "remove";
-  [key: string]: unknown;
-}
+};
+export type ReceivedNewEventAction = {
+  type: typeof RECEIVED_NEW_EVENT;
+  event: EventEntry;
+};
+export type ReceivedUpdatedEventAction = {
+  type: typeof RECEIVED_UPDATED_EVENT;
+  event: EventEntry;
+};
+export type ClearNewEventFlagAction = {
+  type: typeof CLEAR_NEW_EVENT_FLAG;
+  eventId: string;
+};
+export type ClearUpdatedEventFlagAction = {
+  type: typeof CLEAR_UPDATED_EVENT_FLAG;
+  eventId: string;
+};
+export type SetLoadingAction = { type: typeof SET_LOADING; loading: boolean };
+export type SetErrorAction = { type: typeof SET_ERROR; error: string | null };
+export type ReactionUpdatedAction = {
+  type: typeof RECEIVED_REACTION_UPDATED;
+  eventId: string;
+  icon: string;
+  count: number;
+  userIds: string[];
+  currentUserId?: string;
+};
+export type ReceivedEventReactionsAction = {
+  type: typeof RECEIVED_EVENT_REACTIONS;
+  eventId: string;
+  reactions: Record<string, ReactionClientSummary>;
+};
+export type OptimisticReactionAction = {
+  type: typeof OPTIMISTIC_REACTION;
+  eventId: string;
+  icon: string;
+  optimisticAction: "add" | "remove";
+};
+export type ClearEventsAction = { type: typeof CLEAR_EVENTS };
+export type SetCurrentUserIdAction = {
+  type: typeof SET_CURRENT_USER_ID;
+  currentUserId: string;
+};
+export type SetViewContextAction = {
+  type: typeof SET_VIEW_CONTEXT;
+  teamId: string;
+  channelId: string;
+};
+export type HydratePopoutStateAction = {
+  type: typeof HYDRATE_POPOUT_STATE;
+  hydratedState: EventFeedState;
+  teamId: string;
+  channelId: string;
+};
+
+export type EventFeedAction =
+  | ReceivedEventsAction
+  | ReceivedNewEventAction
+  | ReceivedUpdatedEventAction
+  | ClearNewEventFlagAction
+  | ClearUpdatedEventFlagAction
+  | SetLoadingAction
+  | SetErrorAction
+  | ReactionUpdatedAction
+  | ReceivedEventReactionsAction
+  | OptimisticReactionAction
+  | ClearEventsAction
+  | SetCurrentUserIdAction
+  | SetViewContextAction
+  | HydratePopoutStateAction;
 
 export type EventFeedDispatch = Dispatch<EventFeedAction>;
 export type EventFeedThunk<TReturn = void> = (
   dispatch: EventFeedDispatch,
 ) => Promise<TReturn> | TReturn;
 
+type FetchEventsOptions = {
+  offset?: number;
+  limit?: number;
+  channelId?: string;
+  signal?: AbortSignal;
+};
+
+type EventsResponse = {
+  events: EventEntry[];
+  total: number;
+  timeline_order?: TimelineOrder;
+  enable_reactions?: boolean;
+};
+
+type ReactionUpdatedPayload = {
+  event_id: string;
+  icon: string;
+  count: number;
+  user_ids: string[];
+};
+
+type ReactionUsersResponse = {
+  user_ids: string[];
+};
+
+function isEventsResponse(value: unknown): value is EventsResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    Array.isArray(value.events) &&
+    value.events.every(isEventEntry) &&
+    typeof value.total === "number" &&
+    Number.isFinite(value.total) &&
+    (value.timeline_order === undefined ||
+      isTimelineOrder(value.timeline_order)) &&
+    (value.enable_reactions === undefined ||
+      typeof value.enable_reactions === "boolean")
+  );
+}
+
+function isReactionUpdatedPayload(
+  value: unknown,
+): value is ReactionUpdatedPayload {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.event_id === "string" &&
+    typeof value.icon === "string" &&
+    typeof value.count === "number" &&
+    Number.isFinite(value.count) &&
+    isStringArray(value.user_ids)
+  );
+}
+
+function isReactionUsersResponse(
+  value: unknown,
+): value is ReactionUsersResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return isStringArray(value.user_ids);
+}
+
+async function parseReactionMutationResponse(
+  response: Response,
+  failureMessage: string,
+): Promise<Record<string, ReactionClientSummary>> {
+  if (!response.ok) {
+    throw new Error(failureMessage);
+  }
+
+  const data: unknown = await response.json();
+  if (!isReactionSummaryMap(data)) {
+    throw new Error("Invalid reaction response");
+  }
+
+  return data;
+}
+
 export function fetchEvents(
   teamId: string,
-  offset = 0,
-  limit = 50,
-  channelId?: string,
+  { offset = 0, limit = 50, channelId, signal }: FetchEventsOptions = {},
 ): EventFeedThunk {
   return async (dispatch: EventFeedDispatch) => {
     dispatch({ type: SET_LOADING, loading: true });
@@ -66,16 +224,23 @@ export function fetchEvents(
       }
       const response = await fetch(url, {
         headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal,
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      const data = await response.json();
+      const data: unknown = await response.json();
+      if (!isEventsResponse(data)) {
+        throw new Error("Invalid events response");
+      }
+      if (signal?.aborted) {
+        return;
+      }
       dispatch({ type: SET_ERROR, error: null });
       dispatch({
         type: RECEIVED_EVENTS,
-        events: data.events || [],
-        total: data.total || 0,
+        events: data.events,
+        total: data.total,
         append: offset > 0,
         timelineOrder: data.timeline_order || "oldest_first",
         enableReactions: data.enable_reactions,
@@ -83,53 +248,85 @@ export function fetchEvents(
         channelId: channelId || "",
       });
     } catch (error) {
+      if (signal?.aborted || isAbortError(error)) {
+        return;
+      }
       const message =
         error instanceof Error ? error.message : "Failed to load events";
       console.error("Event Feed: failed to fetch events", error);
       dispatch({ type: SET_ERROR, error: message });
     } finally {
-      dispatch({ type: SET_LOADING, loading: false });
+      if (!signal?.aborted) {
+        dispatch({ type: SET_LOADING, loading: false });
+      }
     }
   };
 }
 
-export function receivedNewEvent(event: EventEntry): EventFeedAction {
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+export function receivedNewEvent(event: EventEntry): ReceivedNewEventAction {
   return { type: RECEIVED_NEW_EVENT, event };
 }
 
-export function receivedUpdatedEvent(event: EventEntry): EventFeedAction {
+export function receivedUpdatedEvent(
+  event: EventEntry,
+): ReceivedUpdatedEventAction {
   return { type: RECEIVED_UPDATED_EVENT, event };
+}
+
+function parseWebSocketPayload<TPayload, TAction extends EventFeedAction>(
+  rawPayload: string,
+  validate: (value: unknown) => value is TPayload,
+  buildAction: (payload: TPayload) => TAction,
+  labels: { invalid: string; parseFailure: string },
+): TAction | null {
+  try {
+    const payload: unknown = JSON.parse(rawPayload);
+    if (!validate(payload)) {
+      console.error(labels.invalid, payload);
+      return null;
+    }
+    return buildAction(payload);
+  } catch (e) {
+    console.error(labels.parseFailure, e);
+    return null;
+  }
+}
+
+function parseEventWebSocket<TAction extends EventFeedAction>(
+  rawEvent: string,
+  buildAction: (event: EventEntry) => TAction,
+): TAction | null {
+  return parseWebSocketPayload(rawEvent, isEventEntry, buildAction, {
+    invalid: "Event Feed: invalid WebSocket event payload",
+    parseFailure: "Event Feed: failed to parse WebSocket event",
+  });
 }
 
 export function parseNewEventWebSocket(
   rawEvent: string,
-): EventFeedAction | null {
-  try {
-    const event: EventEntry = JSON.parse(rawEvent);
-    return receivedNewEvent(event);
-  } catch (e) {
-    console.error("Event Feed: failed to parse WebSocket event", e);
-    return null;
-  }
+): ReceivedNewEventAction | null {
+  return parseEventWebSocket(rawEvent, receivedNewEvent);
 }
 
 export function parseUpdatedEventWebSocket(
   rawEvent: string,
-): EventFeedAction | null {
-  try {
-    const event: EventEntry = JSON.parse(rawEvent);
-    return receivedUpdatedEvent(event);
-  } catch (e) {
-    console.error("Event Feed: failed to parse WebSocket event", e);
-    return null;
-  }
+): ReceivedUpdatedEventAction | null {
+  return parseEventWebSocket(rawEvent, receivedUpdatedEvent);
 }
 
-export function clearNewEventFlag(eventId: string): EventFeedAction {
+export function clearNewEventFlag(eventId: string): ClearNewEventFlagAction {
   return { type: CLEAR_NEW_EVENT_FLAG, eventId };
 }
 
-export function clearUpdatedEventFlag(eventId: string): EventFeedAction {
+export function clearUpdatedEventFlag(
+  eventId: string,
+): ClearUpdatedEventFlagAction {
   return { type: CLEAR_UPDATED_EVENT_FLAG, eventId };
 }
 
@@ -139,7 +336,7 @@ export function addReaction(eventId: string, icon: string) {
   ): Promise<Record<string, ReactionClientSummary>> => {
     dispatch({
       type: OPTIMISTIC_REACTION,
-      event_id: eventId,
+      eventId,
       icon,
       optimisticAction: "add",
     });
@@ -148,12 +345,16 @@ export function addReaction(eventId: string, icon: string) {
         `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
         { method: "PUT", headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      if (!resp.ok) throw new Error("Failed to add reaction");
-      return resp.json();
+      const reactions = await parseReactionMutationResponse(
+        resp,
+        "Failed to add reaction",
+      );
+      dispatch(receivedEventReactions(eventId, reactions));
+      return reactions;
     } catch (err) {
       dispatch({
         type: OPTIMISTIC_REACTION,
-        event_id: eventId,
+        eventId,
         icon,
         optimisticAction: "remove",
       });
@@ -168,7 +369,7 @@ export function removeReaction(eventId: string, icon: string) {
   ): Promise<Record<string, ReactionClientSummary>> => {
     dispatch({
       type: OPTIMISTIC_REACTION,
-      event_id: eventId,
+      eventId,
       icon,
       optimisticAction: "remove",
     });
@@ -177,12 +378,16 @@ export function removeReaction(eventId: string, icon: string) {
         `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
         { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      if (!resp.ok) throw new Error("Failed to remove reaction");
-      return resp.json();
+      const reactions = await parseReactionMutationResponse(
+        resp,
+        "Failed to remove reaction",
+      );
+      dispatch(receivedEventReactions(eventId, reactions));
+      return reactions;
     } catch (err) {
       dispatch({
         type: OPTIMISTIC_REACTION,
-        event_id: eventId,
+        eventId,
         icon,
         optimisticAction: "add",
       });
@@ -199,39 +404,69 @@ export function fetchReactionUsers(
     `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
     { headers: { "X-Requested-With": "XMLHttpRequest" } },
   )
-    .then((r) => r.json())
-    .then((data) => data.user_ids || []);
+    .then((r) => {
+      if (!r.ok) {
+        throw new Error("Failed to fetch reaction users");
+      }
+      return r.json();
+    })
+    .then((data: unknown) => {
+      if (!isReactionUsersResponse(data)) {
+        throw new Error("Invalid reaction users response");
+      }
+      return data.user_ids;
+    });
 }
 
-export function receivedReactionUpdated(payload: {
-  event_id: string;
-  icon: string;
-  count: number;
-  user_ids: string[];
-}) {
-  return { type: RECEIVED_REACTION_UPDATED, ...payload };
+export function receivedReactionUpdated(
+  payload: ReactionUpdatedPayload,
+): ReactionUpdatedAction {
+  return {
+    type: RECEIVED_REACTION_UPDATED,
+    eventId: payload.event_id,
+    icon: payload.icon,
+    count: payload.count,
+    userIds: payload.user_ids,
+  };
+}
+
+export function receivedEventReactions(
+  eventId: string,
+  reactions: Record<string, ReactionClientSummary>,
+): ReceivedEventReactionsAction {
+  return {
+    type: RECEIVED_EVENT_REACTIONS,
+    eventId,
+    reactions,
+  };
 }
 
 export function parseReactionWebSocket(
-  msg: ReactionUpdatedWebSocketMessage,
-): EventFeedAction | null {
-  try {
-    const payload = JSON.parse(msg.data.payload);
-    return receivedReactionUpdated(payload);
-  } catch {
-    return null;
-  }
+  rawPayload: string,
+): ReactionUpdatedAction | null {
+  return parseWebSocketPayload(
+    rawPayload,
+    isReactionUpdatedPayload,
+    receivedReactionUpdated,
+    {
+      invalid: "Event Feed: invalid reaction WebSocket payload",
+      parseFailure: "Event Feed: failed to parse reaction WebSocket payload",
+    },
+  );
 }
 
-export function clearEvents() {
+export function clearEvents(): ClearEventsAction {
   return { type: CLEAR_EVENTS };
 }
 
-export function setCurrentUserId(userId: string) {
+export function setCurrentUserId(userId: string): SetCurrentUserIdAction {
   return { type: SET_CURRENT_USER_ID, currentUserId: userId };
 }
 
-export function setViewContext(teamId: string, channelId = "") {
+export function setViewContext(
+  teamId: string,
+  channelId = "",
+): SetViewContextAction {
   return { type: SET_VIEW_CONTEXT, teamId, channelId };
 }
 
@@ -239,7 +474,7 @@ export function hydratePopoutState(
   hydratedState: EventFeedState,
   teamId: string,
   channelId = "",
-) {
+): HydratePopoutStateAction {
   return {
     type: HYDRATE_POPOUT_STATE,
     hydratedState,

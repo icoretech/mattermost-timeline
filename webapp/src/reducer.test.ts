@@ -4,13 +4,15 @@ import {
   CLEAR_NEW_EVENT_FLAG,
   HYDRATE_POPOUT_STATE,
   OPTIMISTIC_REACTION,
+  RECEIVED_EVENT_REACTIONS,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
+  RECEIVED_UPDATED_EVENT,
   SET_ERROR,
   SET_LOADING,
 } from "./actions";
 import reducer from "./reducer";
-import type { EventEntry } from "./types";
+import type { EventEntry } from "./types/timeline";
 
 function makeEvent(overrides: Partial<EventEntry> = {}): EventEntry {
   return {
@@ -118,6 +120,41 @@ describe("reducer", () => {
       expect(state.events[1].id).toBe("e1");
     });
 
+    it("preserves reactions when an updated event payload omits them", () => {
+      const existing = reducer(initial, {
+        type: RECEIVED_EVENTS,
+        events: [
+          makeEvent({
+            id: "e1",
+            title: "before",
+            client_reactions: {
+              eyes: {
+                count: 1,
+                self: true,
+                recent_users: ["user-1"],
+              },
+            },
+          }),
+        ],
+        total: 1,
+        append: false,
+      });
+
+      const state = reducer(existing, {
+        type: RECEIVED_UPDATED_EVENT,
+        event: makeEvent({ id: "e1", title: "after" }),
+      });
+
+      expect(state.events[0].title).toBe("after");
+      expect(state.events[0].client_reactions).toEqual({
+        eyes: {
+          count: 1,
+          self: true,
+          recent_users: ["user-1"],
+        },
+      });
+    });
+
     it("deduplicates on RECEIVED_NEW_EVENT", () => {
       const existing = reducer(initial, {
         type: RECEIVED_EVENTS,
@@ -130,6 +167,8 @@ describe("reducer", () => {
         event: makeEvent({ id: "e1" }),
       });
       expect(state.events).toHaveLength(1);
+      expect(state.total).toBe(1);
+      expect(state.newEventIds).toEqual([]);
     });
   });
 
@@ -234,7 +273,7 @@ describe("reducer", () => {
       } as EventFeedAction);
       const state = reducer(stateWithEvent, {
         type: OPTIMISTIC_REACTION,
-        event_id: "e1",
+        eventId: "e1",
         icon: "eyes",
         optimisticAction: "add",
       } as unknown as EventFeedAction);
@@ -258,12 +297,59 @@ describe("reducer", () => {
       } as EventFeedAction);
       const state = reducer(stateWithEvent, {
         type: OPTIMISTIC_REACTION,
-        event_id: "e1",
+        eventId: "e1",
         icon: "eyes",
         optimisticAction: "remove",
       } as unknown as EventFeedAction);
       expect(state.events[0].client_reactions?.eyes?.count).toBe(1);
       expect(state.events[0].client_reactions?.eyes?.self).toBe(false);
+    });
+  });
+
+  describe("RECEIVED_EVENT_REACTIONS", () => {
+    it("applies the canonical reaction map from a mutation response", () => {
+      const stateWithEvent = reducer(undefined, {
+        type: RECEIVED_EVENTS,
+        events: [makeEvent({ id: "e1" })],
+        total: 1,
+        append: false,
+      } as EventFeedAction);
+
+      const state = reducer(stateWithEvent, {
+        type: RECEIVED_EVENT_REACTIONS,
+        eventId: "e1",
+        reactions: {
+          eyes: { count: 2, self: true, recent_users: ["u1", "u2"] },
+        },
+      } as EventFeedAction);
+
+      expect(state.events[0].client_reactions).toEqual({
+        eyes: { count: 2, self: true, recent_users: ["u1", "u2"] },
+      });
+    });
+
+    it("clears reactions when the mutation response is empty", () => {
+      const stateWithEvent = reducer(undefined, {
+        type: RECEIVED_EVENTS,
+        events: [
+          makeEvent({
+            id: "e1",
+            client_reactions: {
+              eyes: { count: 1, self: true, recent_users: ["u1"] },
+            },
+          }),
+        ],
+        total: 1,
+        append: false,
+      } as EventFeedAction);
+
+      const state = reducer(stateWithEvent, {
+        type: RECEIVED_EVENT_REACTIONS,
+        eventId: "e1",
+        reactions: {},
+      } as EventFeedAction);
+
+      expect(state.events[0].client_reactions).toBeUndefined();
     });
   });
 });

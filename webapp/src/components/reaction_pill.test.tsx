@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactionClientSummary, TimelineUser } from "../types";
+import type { ReactionClientSummary, TimelineUser } from "../types/timeline";
 import ReactionPill from "./reaction_pill";
 
 describe("ReactionPill", () => {

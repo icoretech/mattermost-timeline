@@ -6,6 +6,7 @@ import {
   CLEAR_UPDATED_EVENT_FLAG,
   HYDRATE_POPOUT_STATE,
   OPTIMISTIC_REACTION,
+  RECEIVED_EVENT_REACTIONS,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
   RECEIVED_REACTION_UPDATED,
@@ -15,7 +16,7 @@ import {
   SET_LOADING,
   SET_VIEW_CONTEXT,
 } from "./actions";
-import type { EventEntry } from "./types";
+import type { EventEntry } from "./types/timeline";
 
 function events(
   state: EventEntry[] = [],
@@ -24,38 +25,36 @@ function events(
   switch (action.type) {
     case RECEIVED_EVENTS:
       if (action.append) {
-        return [...state, ...(action.events ?? [])];
+        return [...state, ...action.events];
       }
-      return action.events ?? [];
+      return action.events;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.events ?? state;
+      return action.hydratedState.events;
     case RECEIVED_NEW_EVENT:
-      if (!action.event || state.some((e) => e.id === action.event?.id)) {
-        return state;
-      }
       return [action.event, ...state];
     case RECEIVED_UPDATED_EVENT: {
-      if (!action.event) return state;
-      const updated = action.event;
-      // Replace the event in place, then move to front (newest)
+      const existing = state.find((e) => e.id === action.event.id);
+      const updated = {
+        ...action.event,
+        client_reactions:
+          action.event.client_reactions ?? existing?.client_reactions,
+      };
       const filtered = state.filter((e) => e.id !== updated.id);
       return [updated, ...filtered];
     }
     case RECEIVED_REACTION_UPDATED: {
-      const { event_id, icon, count, user_ids } = action;
+      const { eventId, icon, count, userIds } = action;
       return state.map((ev) => {
-        if (ev.id !== event_id || !icon) return ev;
+        if (ev.id !== eventId || !icon) return ev;
         const reactions = { ...(ev.client_reactions || {}) };
-        const reactionUserIds = user_ids ?? [];
-        const reactionCount = count ?? 0;
-        if (reactionCount === 0) {
+        if (count === 0) {
           delete reactions[icon];
         } else {
-          const recentCount = Math.min(reactionUserIds.length, 3);
+          const recentCount = Math.min(userIds.length, 3);
           reactions[icon] = {
-            count: reactionCount,
-            self: reactionUserIds.includes(action.currentUserId ?? ""),
-            recent_users: reactionUserIds.slice(-recentCount),
+            count,
+            self: userIds.includes(action.currentUserId ?? ""),
+            recent_users: userIds.slice(-recentCount),
           };
         }
         return {
@@ -65,10 +64,22 @@ function events(
         };
       });
     }
-    case OPTIMISTIC_REACTION: {
-      const { event_id, icon, optimisticAction } = action;
+    case RECEIVED_EVENT_REACTIONS: {
       return state.map((ev) => {
-        if (ev.id !== event_id || !icon) return ev;
+        if (ev.id !== action.eventId) return ev;
+        return {
+          ...ev,
+          client_reactions:
+            Object.keys(action.reactions).length > 0
+              ? action.reactions
+              : undefined,
+        };
+      });
+    }
+    case OPTIMISTIC_REACTION: {
+      const { eventId, icon, optimisticAction } = action;
+      return state.map((ev) => {
+        if (ev.id !== eventId || !icon) return ev;
         const reactions = { ...(ev.client_reactions || {}) };
         const existing = reactions[icon] || {
           count: 0,
@@ -110,9 +121,9 @@ function events(
 function isLoading(state = false, action: EventFeedAction): boolean {
   switch (action.type) {
     case SET_LOADING:
-      return action.loading ?? false;
+      return action.loading;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.isLoading ?? state;
+      return action.hydratedState.isLoading;
     default:
       return state;
   }
@@ -121,13 +132,13 @@ function isLoading(state = false, action: EventFeedAction): boolean {
 function total(state = 0, action: EventFeedAction): number {
   switch (action.type) {
     case RECEIVED_EVENTS:
-      return action.total ?? 0;
+      return action.total;
     case RECEIVED_NEW_EVENT:
       return state + 1;
     case CLEAR_EVENTS:
       return 0;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.total ?? state;
+      return action.hydratedState.total;
     default:
       return state;
   }
@@ -136,13 +147,13 @@ function total(state = 0, action: EventFeedAction): number {
 function newEventIds(state: string[] = [], action: EventFeedAction): string[] {
   switch (action.type) {
     case RECEIVED_NEW_EVENT:
-      return action.event ? [...state, action.event.id] : state;
+      return [...state, action.event.id];
     case CLEAR_NEW_EVENT_FLAG:
       return action.eventId
         ? state.filter((id) => id !== action.eventId)
         : state;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.newEventIds ?? state;
+      return action.hydratedState.newEventIds;
     default:
       return state;
   }
@@ -154,13 +165,13 @@ function updatedEventIds(
 ): string[] {
   switch (action.type) {
     case RECEIVED_UPDATED_EVENT:
-      return action.event ? [...state, action.event.id] : state;
+      return [...state, action.event.id];
     case CLEAR_UPDATED_EVENT_FLAG:
       return action.eventId
         ? state.filter((id) => id !== action.eventId)
         : state;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.updatedEventIds ?? state;
+      return action.hydratedState.updatedEventIds;
     default:
       return state;
   }
@@ -172,13 +183,13 @@ function error(
 ): string | null {
   switch (action.type) {
     case SET_ERROR:
-      return action.error ?? null;
+      return action.error;
     case RECEIVED_EVENTS:
       return null;
     case CLEAR_EVENTS:
       return null;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.error ?? state;
+      return action.hydratedState.error;
     default:
       return state;
   }
@@ -192,7 +203,7 @@ function timelineOrder(
     case RECEIVED_EVENTS:
       return (action.timelineOrder as "oldest_first" | "newest_first") || state;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.timelineOrder ?? state;
+      return action.hydratedState.timelineOrder;
     default:
       return state;
   }
@@ -203,7 +214,7 @@ function enableReactions(state = true, action: EventFeedAction): boolean {
     case RECEIVED_EVENTS:
       return action.enableReactions ?? state;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.enableReactions ?? state;
+      return action.hydratedState.enableReactions;
     default:
       return state;
   }
@@ -212,9 +223,9 @@ function enableReactions(state = true, action: EventFeedAction): boolean {
 function currentUserId(state = "", action: EventFeedAction): string {
   switch (action.type) {
     case SET_CURRENT_USER_ID:
-      return action.currentUserId ?? state;
+      return action.currentUserId;
     case HYDRATE_POPOUT_STATE:
-      return action.hydratedState?.currentUserId ?? state;
+      return action.hydratedState.currentUserId;
     default:
       return state;
   }
@@ -223,9 +234,10 @@ function currentUserId(state = "", action: EventFeedAction): string {
 function viewTeamId(state = "", action: EventFeedAction): string {
   switch (action.type) {
     case RECEIVED_EVENTS:
-    case SET_VIEW_CONTEXT:
-    case HYDRATE_POPOUT_STATE:
       return action.teamId ?? state;
+    case HYDRATE_POPOUT_STATE:
+    case SET_VIEW_CONTEXT:
+      return action.teamId;
     case CLEAR_EVENTS:
       return "";
     default:
@@ -236,9 +248,10 @@ function viewTeamId(state = "", action: EventFeedAction): string {
 function viewChannelId(state = "", action: EventFeedAction): string {
   switch (action.type) {
     case RECEIVED_EVENTS:
-    case SET_VIEW_CONTEXT:
-    case HYDRATE_POPOUT_STATE:
       return action.channelId ?? state;
+    case HYDRATE_POPOUT_STATE:
+    case SET_VIEW_CONTEXT:
+      return action.channelId;
     case CLEAR_EVENTS:
       return "";
     default:
@@ -246,7 +259,7 @@ function viewChannelId(state = "", action: EventFeedAction): string {
   }
 }
 
-export default combineReducers({
+const eventFeedReducer = combineReducers({
   events,
   isLoading,
   error,
@@ -259,3 +272,16 @@ export default combineReducers({
   viewTeamId,
   viewChannelId,
 });
+
+export default function reducer(
+  state: ReturnType<typeof eventFeedReducer> | undefined,
+  action: EventFeedAction,
+): ReturnType<typeof eventFeedReducer> {
+  if (action.type === RECEIVED_NEW_EVENT) {
+    if (state?.events.some((event) => event.id === action.event.id)) {
+      return state;
+    }
+  }
+
+  return eventFeedReducer(state, action);
+}

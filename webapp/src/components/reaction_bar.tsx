@@ -1,29 +1,8 @@
-import {
-  CircleCheckBig,
-  Eye,
-  Hand,
-  Heart,
-  Megaphone,
-  PartyPopper,
-  SmilePlus,
-  ThumbsUp,
-  Wrench,
-  X,
-} from "lucide-react";
+import { SmilePlus, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactionClientSummary, TimelineUser } from "../types";
+import type { ReactionClientSummary, TimelineUser } from "../types/timeline";
 import ReactionPill from "./reaction_pill";
-
-const REACTIONS = [
-  { icon: "eyes", Icon: Eye, label: "I've seen this" },
-  { icon: "wrench", Icon: Wrench, label: "Working on it" },
-  { icon: "check", Icon: CircleCheckBig, label: "Handled" },
-  { icon: "megaphone", Icon: Megaphone, label: "Needs attention" },
-  { icon: "thumbs-up", Icon: ThumbsUp, label: "Acknowledged" },
-  { icon: "hand", Icon: Hand, label: "I'll take this" },
-  { icon: "party", Icon: PartyPopper, label: "Celebrate" },
-  { icon: "heart", Icon: Heart, label: "Appreciate" },
-];
+import { REACTIONS } from "./reactions";
 
 interface Props {
   reactions?: Record<string, ReactionClientSummary>;
@@ -43,7 +22,7 @@ export default function ReactionBar({
   const [pickerOpen, setPickerOpen] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
 
-  const handleToggle = useCallback(
+  const toggleReaction = useCallback(
     (icon: string) => {
       const existing = reactions?.[icon];
       if (existing?.self) {
@@ -58,14 +37,9 @@ export default function ReactionBar({
   const handlePickerSelect = useCallback(
     (icon: string) => {
       setPickerOpen(false);
-      const existing = reactions?.[icon];
-      if (existing?.self) {
-        onRemoveReaction(icon);
-      } else {
-        onAddReaction(icon);
-      }
+      toggleReaction(icon);
     },
-    [reactions, onAddReaction, onRemoveReaction],
+    [toggleReaction],
   );
 
   useEffect(() => {
@@ -114,7 +88,7 @@ export default function ReactionBar({
           key={icon}
           icon={icon}
           summary={summary}
-          onToggle={handleToggle}
+          onToggle={toggleReaction}
           onFetchUsers={onFetchUsers}
           getUser={getUser}
         />

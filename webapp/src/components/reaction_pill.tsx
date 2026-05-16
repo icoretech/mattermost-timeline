@@ -1,27 +1,6 @@
-import {
-  CircleCheckBig,
-  Eye,
-  Hand,
-  Heart,
-  type LucideIcon,
-  Megaphone,
-  PartyPopper,
-  ThumbsUp,
-  Wrench,
-} from "lucide-react";
-import React, { useCallback, useRef, useState } from "react";
-import type { ReactionClientSummary, TimelineUser } from "../types";
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  eyes: Eye,
-  wrench: Wrench,
-  check: CircleCheckBig,
-  megaphone: Megaphone,
-  "thumbs-up": ThumbsUp,
-  hand: Hand,
-  party: PartyPopper,
-  heart: Heart,
-};
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactionClientSummary, TimelineUser } from "../types/timeline";
+import { REACTION_ICON_BY_NAME } from "./reactions";
 
 const TOOLTIP_CACHE_TTL_MS = 30000;
 
@@ -49,8 +28,20 @@ export default function ReactionPill({
   getUser,
 }: Props) {
   const [tooltipUsers, setTooltipUsers] = useState<string[] | null>(null);
+  const [tooltipError, setTooltipError] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const cacheTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const requestSeqRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (cacheTimerRef.current) {
+        clearTimeout(cacheTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleClick = useCallback(() => {
     onToggle(icon);
@@ -59,13 +50,27 @@ export default function ReactionPill({
   const handleMouseEnter = useCallback(async () => {
     setShowTooltip(true);
     if (!tooltipUsers) {
-      const users = await onFetchUsers(icon);
+      const requestSeq = ++requestSeqRef.current;
+      setTooltipError(false);
+      let users: string[];
+      try {
+        users = await onFetchUsers(icon);
+      } catch {
+        users = [];
+        if (mountedRef.current && requestSeq === requestSeqRef.current) {
+          setTooltipError(true);
+        }
+      }
+      if (!mountedRef.current || requestSeq !== requestSeqRef.current) {
+        return;
+      }
       setTooltipUsers(users);
       if (cacheTimerRef.current) {
         clearTimeout(cacheTimerRef.current);
       }
       cacheTimerRef.current = setTimeout(() => {
         setTooltipUsers(null);
+        setTooltipError(false);
         cacheTimerRef.current = null;
       }, TOOLTIP_CACHE_TTL_MS);
     }
@@ -75,19 +80,20 @@ export default function ReactionPill({
     setShowTooltip(false);
   }, []);
 
-  const IconComponent = ICON_MAP[icon];
+  const IconComponent = REACTION_ICON_BY_NAME[icon];
   if (!IconComponent) return null;
 
   const avatars = summary.recent_users.map((uid) => {
     const user = getUser(uid);
-    const initial = user?.username?.[0]?.toUpperCase() || "?";
     const imageUrl = buildAvatarImageUrl(uid, user?.last_picture_update);
-    return { uid, initial, imageUrl };
+    return { uid, imageUrl, label: user?.username || uid };
   });
 
-  const tooltipText = tooltipUsers
-    ? tooltipUsers.map((uid) => getUser(uid)?.username || uid).join(", ")
-    : "Loading...";
+  const tooltipText = tooltipError
+    ? "Unable to load users"
+    : tooltipUsers
+      ? tooltipUsers.map((uid) => getUser(uid)?.username || uid).join(", ")
+      : "Loading...";
 
   return (
     <button
@@ -104,15 +110,11 @@ export default function ReactionPill({
         <span className="reaction-pill__avatars">
           {avatars.map((a) => (
             <span key={a.uid} className="reaction-pill__avatar">
-              {a.imageUrl ? (
-                <img
-                  src={a.imageUrl}
-                  alt={a.initial}
-                  className="reaction-pill__avatar-img"
-                />
-              ) : (
-                a.initial
-              )}
+              <img
+                src={a.imageUrl}
+                alt={a.label}
+                className="reaction-pill__avatar-img"
+              />
             </span>
           ))}
         </span>

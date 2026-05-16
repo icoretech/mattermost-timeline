@@ -151,4 +151,80 @@ describe("plugin entrypoint", () => {
       }),
     );
   });
+
+  it("ignores invalid popout plugin state instead of hydrating it", async () => {
+    const registerPlugin = vi.fn();
+    const dispatch = vi.fn();
+    let parentListener: ((channel: string, data?: unknown) => void) | undefined;
+
+    window.registerPlugin = registerPlugin;
+    window.WebappUtils = {
+      popouts: {
+        isPopoutWindow: vi.fn(() => true),
+        onMessageFromParent: vi.fn((callback) => {
+          parentListener = callback;
+        }),
+        sendToParent: vi.fn(),
+      },
+    };
+
+    await import("./index");
+
+    const plugin = registerPlugin.mock.calls[0][1] as {
+      initialize: (registry: unknown, store: unknown) => void;
+    };
+    const store = {
+      dispatch,
+      getState: () => ({
+        entities: {
+          users: { currentUserId: "user123" },
+          teams: { currentTeamId: "team123" },
+          channels: { currentChannelId: "channel123" },
+        },
+      }),
+    };
+    const registry = {
+      registerReducer: vi.fn(),
+      registerRightHandSidebarComponent: vi.fn(() => ({
+        toggleRHSPlugin: { type: "toggle_rhs" },
+      })),
+      registerChannelHeaderButtonAction: vi.fn(),
+      registerWebSocketEventHandler: vi.fn(),
+      registerRHSPluginPopoutListener: vi.fn(),
+    };
+
+    plugin.initialize(registry, store);
+
+    parentListener?.("SEND_TIMELINE_POPOUT_STATE", {
+      teamId: "team123",
+      channelId: "channel123",
+      currentUserId: "user123",
+      pluginState: {
+        events: [
+          {
+            id: "event-1",
+            team_id: "team123",
+            timestamp: 1000,
+            title: "malformed event",
+            event_type: "info",
+            links: [{ url: "https://example.com", label: 123 }],
+          },
+        ],
+        isLoading: false,
+        error: null,
+        total: 1,
+        newEventIds: [],
+        updatedEventIds: [],
+        timelineOrder: "oldest_first",
+        enableReactions: true,
+        currentUserId: "user123",
+        viewTeamId: "team123",
+        viewChannelId: "channel123",
+      },
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: HYDRATE_POPOUT_STATE }),
+    );
+  });
 });

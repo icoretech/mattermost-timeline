@@ -1,6 +1,6 @@
 import React, { type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { EventEntry } from "../types";
+import type { EventEntry } from "../types/timeline";
 import TimelineEntry, { renderMarkdown } from "./timeline_entry";
 
 describe("renderMarkdown", () => {

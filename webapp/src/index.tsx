@@ -1,8 +1,7 @@
 import type { GlobalState } from "@mattermost/types/store";
 import React from "react";
-import type { Store } from "redux";
+import type { Reducer, Store } from "redux";
 import {
-  type EventFeedAction,
   hydratePopoutState,
   parseNewEventWebSocket,
   parseReactionWebSocket,
@@ -15,12 +14,18 @@ import RHSView from "./components/rhs_view";
 import manifest from "./manifest";
 import reducer from "./reducer";
 import { getPluginState } from "./selectors";
+import {
+  isEventEntry,
+  isRecord,
+  isStringArray,
+  isTimelineOrder,
+} from "./timeline_validation";
+import type { PluginRegistry } from "./types/mattermost-webapp";
 import type {
   EventFeedState,
   NewEventWebSocketMessage,
   ReactionUpdatedWebSocketMessage,
-} from "./types";
-import type { PluginRegistry } from "./types/mattermost-webapp";
+} from "./types/timeline";
 
 const REQUEST_POPOUT_STATE = "GET_TIMELINE_POPOUT_STATE";
 const SEND_POPOUT_STATE = "SEND_TIMELINE_POPOUT_STATE";
@@ -31,6 +36,27 @@ type EventFeedPopoutPayload = {
   currentUserId: string;
   pluginState?: EventFeedState;
 };
+
+function isEventFeedState(value: unknown): value is EventFeedState {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    Array.isArray(value.events) &&
+    value.events.every(isEventEntry) &&
+    typeof value.isLoading === "boolean" &&
+    (value.error === null || typeof value.error === "string") &&
+    typeof value.total === "number" &&
+    isStringArray(value.newEventIds) &&
+    isStringArray(value.updatedEventIds) &&
+    isTimelineOrder(value.timelineOrder) &&
+    typeof value.enableReactions === "boolean" &&
+    typeof value.currentUserId === "string" &&
+    typeof value.viewTeamId === "string" &&
+    typeof value.viewChannelId === "string"
+  );
+}
 
 function isEventFeedPopoutPayload(
   value: unknown,
@@ -44,13 +70,14 @@ function isEventFeedPopoutPayload(
   return (
     typeof payload.teamId === "string" &&
     typeof payload.channelId === "string" &&
-    typeof payload.currentUserId === "string"
+    typeof payload.currentUserId === "string" &&
+    (payload.pluginState === undefined || isEventFeedState(payload.pluginState))
   );
 }
 
 export default class Plugin {
   public initialize(registry: PluginRegistry, store: Store<GlobalState>) {
-    registry.registerReducer(reducer);
+    registry.registerReducer(reducer as Reducer);
 
     const currentUserId = store.getState().entities.users.currentUserId || "";
     if (currentUserId) {
@@ -144,10 +171,10 @@ export default class Plugin {
     registry.registerWebSocketEventHandler<{ payload: string }>(
       `custom_${manifest.id}_reaction_updated`,
       (msg: ReactionUpdatedWebSocketMessage) => {
-        const action = parseReactionWebSocket(msg);
+        const action = parseReactionWebSocket(msg.data.payload);
         if (action) {
           const userId = store.getState().entities.users.currentUserId || "";
-          const nextAction: EventFeedAction = {
+          const nextAction = {
             ...action,
             currentUserId: userId,
           };

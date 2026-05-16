@@ -12,13 +12,14 @@ import {
   fetchEvents,
   fetchReactionUsers,
   removeReaction,
+  SET_ERROR,
 } from "../actions";
 import {
   getCurrentChannelId,
   getCurrentTeamId,
   getPluginState,
 } from "../selectors";
-import type { EventEntry, TimelineUser } from "../types";
+import type { EventEntry, TimelineUser } from "../types/timeline";
 
 import TimelineEntry from "./timeline_entry";
 
@@ -31,7 +32,7 @@ type AppDispatch = Dispatch &
 const RHSView: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const listRef = useRef<HTMLDivElement>(null);
-  const initialLoadDone = useRef(false);
+  const initialScrolledContextRef = useRef({ teamId: "", channelId: "" });
   const loadedContextRef = useRef({ teamId: "", channelId: "" });
 
   const store = useStore<GlobalState>();
@@ -70,17 +71,24 @@ const RHSView: React.FC = () => {
 
   useEffect(() => {
     if (currentTeamId) {
+      const controller = new AbortController();
       const sameContext =
         loadedContextRef.current.teamId === currentTeamId &&
         loadedContextRef.current.channelId === (currentChannelId || "");
 
       if (!sameContext) {
+        initialScrolledContextRef.current = { teamId: "", channelId: "" };
         dispatch(clearEvents());
       }
 
       dispatch(
-        fetchEvents(currentTeamId, 0, 50, currentChannelId || undefined),
+        fetchEvents(currentTeamId, {
+          channelId: currentChannelId || undefined,
+          signal: controller.signal,
+        }),
       );
+
+      return () => controller.abort();
     }
   }, [dispatch, currentTeamId, currentChannelId]);
 
@@ -96,17 +104,24 @@ const RHSView: React.FC = () => {
 
   // Scroll to bottom on initial load (only in oldest_first mode)
   useEffect(() => {
+    const alreadyScrolled =
+      initialScrolledContextRef.current.teamId === viewTeamId &&
+      initialScrolledContextRef.current.channelId === viewChannelId;
+
     if (
       isOldestFirst &&
       listRef.current &&
       events.length > 0 &&
       !isLoading &&
-      !initialLoadDone.current
+      !alreadyScrolled
     ) {
-      initialLoadDone.current = true;
+      initialScrolledContextRef.current = {
+        teamId: viewTeamId,
+        channelId: viewChannelId,
+      };
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [isLoading, events.length, isOldestFirst]);
+  }, [isLoading, events.length, isOldestFirst, viewTeamId, viewChannelId]);
 
   const handleAnimationEnd = useCallback(
     (eventId: string) => {
@@ -125,12 +140,10 @@ const RHSView: React.FC = () => {
   const handleLoadMore = useCallback(() => {
     if (currentTeamId && events.length < total) {
       dispatch(
-        fetchEvents(
-          currentTeamId,
-          events.length,
-          50,
-          currentChannelId || undefined,
-        ),
+        fetchEvents(currentTeamId, {
+          offset: events.length,
+          channelId: currentChannelId || undefined,
+        }),
       );
     }
   }, [dispatch, currentTeamId, currentChannelId, events.length, total]);
@@ -143,18 +156,32 @@ const RHSView: React.FC = () => {
     [store],
   );
 
-  const handleAddReaction = useCallback(
-    (eventId: string, icon: string) => {
-      dispatch(addReaction(eventId, icon));
+  const handleReactionMutationFailure = useCallback(
+    (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : "Failed to update reaction";
+      console.error("Event Feed: failed to update reaction", error);
+      dispatch({ type: SET_ERROR, error: message });
     },
     [dispatch],
   );
 
+  const handleAddReaction = useCallback(
+    (eventId: string, icon: string) => {
+      void Promise.resolve(dispatch(addReaction(eventId, icon))).catch(
+        handleReactionMutationFailure,
+      );
+    },
+    [dispatch, handleReactionMutationFailure],
+  );
+
   const handleRemoveReaction = useCallback(
     (eventId: string, icon: string) => {
-      dispatch(removeReaction(eventId, icon));
+      void Promise.resolve(dispatch(removeReaction(eventId, icon))).catch(
+        handleReactionMutationFailure,
+      );
     },
-    [dispatch],
+    [dispatch, handleReactionMutationFailure],
   );
 
   const handleFetchReactionUsers = useCallback(

@@ -1,7 +1,7 @@
 import type { GlobalState } from "@mattermost/types/store";
 
 import manifest from "./manifest";
-import type { EventFeedState } from "./types";
+import type { EventFeedState } from "./types/timeline";
 
 // Returns undefined before the plugin reducer is registered.
 export function getPluginState(state: GlobalState): EventFeedState | undefined {
