@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.1](https://github.com/icoretech/mattermost-timeline/compare/v1.4.0...v1.4.1) (2026-05-16)
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide-react to v1.16.0 ([#72](https://github.com/icoretech/mattermost-timeline/issues/72)) ([281e40f](https://github.com/icoretech/mattermost-timeline/commit/281e40fb2bf26f7f4b9ab8603f0c9e57f235cd00))
+* **deps:** update module github.com/mattermost/mattermost/server/public to v0.4.0 ([#68](https://github.com/icoretech/mattermost-timeline/issues/68)) ([7fcf4ca](https://github.com/icoretech/mattermost-timeline/commit/7fcf4cad4704b756a5853ff00905e9f4cd585a51))
+* **server:** harden timeline event contracts ([2f7776f](https://github.com/icoretech/mattermost-timeline/commit/2f7776f7e3405263aa3c9cec1257e188027a3b90))
+* **webapp:** tighten timeline state handling ([5afb7f9](https://github.com/icoretech/mattermost-timeline/commit/5afb7f940a4f666abab1fcbab7117e16f1d52765))
+
 ## [1.4.0](https://github.com/icoretech/mattermost-timeline/compare/v1.3.5...v1.4.0) (2026-04-29)
 
 
