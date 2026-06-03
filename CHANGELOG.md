@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.3](https://github.com/icoretech/mattermost-timeline/compare/v1.4.2...v1.4.3) (2026-06-03)
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide-react to v1.17.0 ([#86](https://github.com/icoretech/mattermost-timeline/issues/86)) ([8c85936](https://github.com/icoretech/mattermost-timeline/commit/8c85936a65c7ad5e6969579e05d5e7958c4c59c1))
+* **deps:** update module github.com/mattermost/mattermost/server/public to v0.4.2 ([#90](https://github.com/icoretech/mattermost-timeline/issues/90)) ([c74d659](https://github.com/icoretech/mattermost-timeline/commit/c74d659e1c8bc80b89d50b49eaa5f7afa71c2001))
+
 ## [1.4.2](https://github.com/icoretech/mattermost-timeline/compare/v1.4.1...v1.4.2) (2026-05-26)
 
 
