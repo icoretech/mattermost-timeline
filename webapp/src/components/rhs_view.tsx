@@ -235,7 +235,7 @@ const RHSView: React.FC = () => {
         {!isLoading && events.length === 0 && (
           <div className="event-feed-empty">
             <span className="event-feed-empty__icon">{"📡"}</span>
-            <p>{"No events yet"}</p>
+            <p className="event-feed-empty__title">{"No events yet"}</p>
             <p className="event-feed-empty__hint">
               {"Events will appear here when webhooks are received."}
             </p>
