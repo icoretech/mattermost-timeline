@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.4](https://github.com/icoretech/mattermost-timeline/compare/v1.4.3...v1.4.4) (2026-06-25)
+
+
+### Bug Fixes
+
+* **deps:** update lucide monorepo to v1.18.0 ([#97](https://github.com/icoretech/mattermost-timeline/issues/97)) ([35c412b](https://github.com/icoretech/mattermost-timeline/commit/35c412b7aa22b5f4362cab05bd138ec7727f6bb7))
+* **deps:** update lucide monorepo to v1.20.0 ([#100](https://github.com/icoretech/mattermost-timeline/issues/100)) ([cb9e086](https://github.com/icoretech/mattermost-timeline/commit/cb9e0867d3159afe3d4da3e206eeaf25938f3899))
+* **deps:** update lucide monorepo to v1.21.0 ([#102](https://github.com/icoretech/mattermost-timeline/issues/102)) ([66045c4](https://github.com/icoretech/mattermost-timeline/commit/66045c475849be74955ca8682bfe466eafb79705))
+* resolve webhook team and channel names ([d8af815](https://github.com/icoretech/mattermost-timeline/commit/d8af81534ca7fce3634921526f2df1841c45c780))
+
 ## [1.4.3](https://github.com/icoretech/mattermost-timeline/compare/v1.4.2...v1.4.3) (2026-06-03)
 
 
