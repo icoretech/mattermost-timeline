@@ -22,6 +22,9 @@ func newTestPlugin(t *testing.T, api *plugintest.API, cfg *configuration) *Plugi
 	t.Helper()
 	p := &Plugin{}
 	p.SetAPI(api)
+	api.On("GetTeam", mock.AnythingOfType("string")).Return(func(teamID string) *model.Team {
+		return &model.Team{Id: teamID}
+	}, (*model.AppError)(nil)).Maybe()
 	p.setConfiguration(cfg)
 	p.store = NewEventStore(api, cfg.maxEventsStoredInt())
 	p.router = p.initRouter()
@@ -39,16 +42,16 @@ func TestHandleWebhook_ValidRequest(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"deploy v1.0","message":"Deployed successfully","event_type":"deploy","source":"ci","team_id":"team-1"}`
+	payload := `{"title":"deploy v1.0","message":"Deployed successfully","event_type":"deploy","source":"ci","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 
 	// Store mocks
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
@@ -64,7 +67,7 @@ func TestHandleWebhook_ValidRequest(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
 	assert.Equal(t, "deploy v1.0", event.Title)
 	assert.Equal(t, "deploy", event.EventType)
-	assert.Equal(t, "team-1", event.TeamID)
+	assert.Equal(t, "aaaaaaaaaaaaaaaaaaaaaaaaaa", event.TeamID)
 	assert.NotEmpty(t, event.ID)
 	api.AssertExpectations(t)
 }
@@ -83,13 +86,13 @@ func TestHandleWebhook_TeamIDFromQueryParam(t *testing.T) {
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-q:_global").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-q:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-q").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-q", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:bbbbbbbbbbbbbbbbbbbbbbbbbb:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:bbbbbbbbbbbbbbbbbbbbbbbbbb:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:bbbbbbbbbbbbbbbbbbbbbbbbbb").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:bbbbbbbbbbbbbbbbbbbbbbbbbb", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
 
-	req := httptest.NewRequest(http.MethodPost, "/webhook?team_id=team-q", strings.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/webhook?team_id=bbbbbbbbbbbbbbbbbbbbbbbbbb", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
 
@@ -98,7 +101,137 @@ func TestHandleWebhook_TeamIDFromQueryParam(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, rec.Code)
 	var event Event
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
-	assert.Equal(t, "team-q", event.TeamID)
+	assert.Equal(t, "bbbbbbbbbbbbbbbbbbbbbbbbbb", event.TeamID)
+	api.AssertExpectations(t)
+}
+func TestHandleWebhook_TeamNameFromQueryParam(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:      "s3cret",
+		MaxEventsStored:    "100",
+		MaxEventsDisplayed: "50",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"deploy","event_type":"deploy"}`
+
+	api.On("GetTeamByName", "example-org").Return(&model.Team{Id: "cccccccccccccccccccccccccc", Name: "example-org"}, (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
+		return b.TeamId == "cccccccccccccccccccccccccc"
+	})).Return()
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook?team_id=example-org", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	var event Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "cccccccccccccccccccccccccc", event.TeamID)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_TeamNameFromPayload(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:      "s3cret",
+		MaxEventsStored:    "100",
+		MaxEventsDisplayed: "50",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"deploy","event_type":"deploy","team_id":"example-org"}`
+
+	api.On("GetTeamByName", "example-org").Return(&model.Team{Id: "cccccccccccccccccccccccccc", Name: "example-org"}, (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
+		return b.TeamId == "cccccccccccccccccccccccccc"
+	})).Return()
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	var event Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "cccccccccccccccccccccccccc", event.TeamID)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_IDShapedTeamNameFromPayload(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret:      "s3cret",
+		MaxEventsStored:    "100",
+		MaxEventsDisplayed: "50",
+	}
+
+	const idShapedTeamName = "slugslugslugslugslugslugsl"
+	const resolvedTeamID = "dddddddddddddddddddddddddd"
+	api.On("GetTeam", idShapedTeamName).Return((*model.Team)(nil), model.NewAppError("test", "not_found", nil, "", http.StatusNotFound)).Once()
+	p := newTestPlugin(t, api, cfg)
+
+	payload := fmt.Sprintf(`{"title":"deploy","event_type":"deploy","team_id":"%s"}`, idShapedTeamName)
+
+	api.On("GetTeamByName", idShapedTeamName).Return(&model.Team{Id: resolvedTeamID, Name: idShapedTeamName}, (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:"+resolvedTeamID+":_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:"+resolvedTeamID+":_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:"+resolvedTeamID).Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:"+resolvedTeamID, mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
+		return b.TeamId == resolvedTeamID
+	})).Return()
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	var event Event
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, resolvedTeamID, event.TeamID)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsUnknownTeamName(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamByName", "missing-team").Return((*model.Team)(nil), model.NewAppError("test", "not_found", nil, "", http.StatusNotFound))
+
+	payload := `{"title":"deploy","event_type":"deploy","team_id":"missing-team"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Invalid team ID or name: missing-team")
 	api.AssertExpectations(t)
 }
 
@@ -107,7 +240,7 @@ func TestHandleWebhook_MissingSecret(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "s3cret"}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"test","team_id":"team-1"}`
+	payload := `{"title":"test","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	// No X-Webhook-Secret header
 	rec := httptest.NewRecorder()
@@ -123,7 +256,7 @@ func TestHandleWebhook_WrongSecret(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "s3cret"}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"test","team_id":"team-1"}`
+	payload := `{"title":"test","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "wrong-secret")
 	rec := httptest.NewRecorder()
@@ -139,7 +272,7 @@ func TestHandleWebhook_UnconfiguredSecret(t *testing.T) {
 	cfg := &configuration{WebhookSecret: ""}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"test","team_id":"team-1"}`
+	payload := `{"title":"test","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "anything")
 	rec := httptest.NewRecorder()
@@ -155,7 +288,7 @@ func TestHandleWebhook_MissingTitle(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "s3cret"}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"message":"no title here","team_id":"team-1"}`
+	payload := `{"message":"no title here","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
@@ -206,15 +339,15 @@ func TestHandleWebhook_DefaultEventType(t *testing.T) {
 	p := newTestPlugin(t, api, cfg)
 
 	// No event_type in payload
-	payload := `{"title":"test event","team_id":"team-1"}`
+	payload := `{"title":"test event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
@@ -238,7 +371,7 @@ func TestHandleWebhook_StoreError(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"fail event","team_id":"team-1"}`
+	payload := `{"title":"fail event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
@@ -269,18 +402,18 @@ func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	p := newTestPlugin(t, api, cfg)
 
 	// User is a team member
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
 	evt := Event{ID: "evt-1", Title: "test", EventType: "deploy"}
 	evtJSON, _ := json.Marshal(evt)
 	ids := []string{"evt-1"}
 	indexData, _ := json.Marshal(ids)
 
-	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-1").Return(evtJSON, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -305,8 +438,8 @@ func TestHandleGetEvents_ProjectsReactionSummaries(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
 	evt := Event{
 		ID:        "evt-1",
@@ -322,10 +455,10 @@ func TestHandleGetEvents_ProjectsReactionSummaries(t *testing.T) {
 	evtJSON, _ := json.Marshal(evt)
 	indexData, _ := json.Marshal([]string{"evt-1"})
 
-	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-1").Return(evtJSON, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -359,18 +492,18 @@ func TestHandleGetEvents_WithoutChannelIDUsesTeamWideIndex(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
 	evt := Event{ID: "evt-global", Title: "team wide", EventType: "generic"}
 	evtJSON, _ := json.Marshal(evt)
 	ids := []string{"evt-global"}
 	indexData, _ := json.Marshal(ids)
 
-	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-global").Return(evtJSON, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -381,7 +514,7 @@ func TestHandleGetEvents_WithoutChannelIDUsesTeamWideIndex(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Events, 1)
 	assert.Equal(t, "evt-global", resp.Events[0].ID)
-	api.AssertNotCalled(t, "KVGet", "event_index:team-1")
+	api.AssertNotCalled(t, "KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa")
 	api.AssertExpectations(t)
 }
 
@@ -394,11 +527,11 @@ func TestHandleGetEvents_TimelineOrder(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -431,7 +564,7 @@ func TestHandleGetEvents_Unauthorized(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	// No Mattermost-User-ID header
 	rec := httptest.NewRecorder()
 
@@ -446,10 +579,10 @@ func TestHandleGetEvents_NotTeamMember(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
 		Return((*model.TeamMember)(nil), model.NewAppError("test", "not_found", nil, "", 404))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -468,8 +601,8 @@ func TestHandleGetEvents_WithPagination(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
 	ids := []string{"evt-3", "evt-2", "evt-1"}
 	indexData, _ := json.Marshal(ids)
@@ -477,10 +610,10 @@ func TestHandleGetEvents_WithPagination(t *testing.T) {
 	evt2 := Event{ID: "evt-2", Title: "middle", EventType: "generic"}
 	evt2JSON, _ := json.Marshal(evt2)
 
-	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-2").Return(evt2JSON, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&offset=1&limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&offset=1&limit=1", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -503,12 +636,12 @@ func TestHandleGetEvents_DefaultLimit(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
 
 	// No limit param => defaults to 50
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -527,10 +660,10 @@ func TestHandleGetEvents_NegativeOffsetRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&offset=-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&offset=-1", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -548,10 +681,10 @@ func TestHandleGetEvents_InvalidOffsetRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&offset=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&offset=abc", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -567,10 +700,10 @@ func TestHandleGetEvents_InvalidLimitRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&limit=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&limit=abc", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -586,10 +719,10 @@ func TestHandleGetEvents_NonPositiveLimitRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "team-1", "user-1").
-		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
+		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&limit=0", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&limit=0", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -610,7 +743,7 @@ func TestHandleWebhook_RejectsOversizedBody(t *testing.T) {
 
 	const oversizedWebhookBodyBytes = 256 * 1024
 	tooLargeTitle := strings.Repeat("a", oversizedWebhookBodyBytes)
-	payload := `{"title":"` + tooLargeTitle + `","team_id":"team-1"}`
+	payload := `{"title":"` + tooLargeTitle + `","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
@@ -632,11 +765,11 @@ func TestMattermostAuthRequired_WithUserID(t *testing.T) {
 	p := newTestPlugin(t, api, cfg)
 
 	// We need the full pipeline to reach handleGetEvents, so mock the team member check
-	api.On("GetTeamMember", "team-1", "user-1").
+	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
 		Return(&model.TeamMember{}, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
 
@@ -652,7 +785,7 @@ func TestMattermostAuthRequired_WithoutUserID(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	// No Mattermost-User-ID header
 	rec := httptest.NewRecorder()
 
@@ -670,7 +803,7 @@ func TestWebhookDoesNotRequireAuth(t *testing.T) {
 	// The webhook should not go through the auth middleware,
 	// so a request without Mattermost-User-ID should still be processed
 	// (and fail on validation, not on auth)
-	payload := `{"title":"test","team_id":"team-1"}`
+	payload := `{"title":"test","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "wrong")
 	rec := httptest.NewRecorder()
@@ -692,15 +825,15 @@ func TestHandleWebhook_WithLinks(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"deploy","team_id":"team-1","links":[{"url":"https://a.com","label":"Release"},{"url":"https://b.com","label":"CI"}]}`
+	payload := `{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","links":[{"url":"https://a.com","label":"Release"},{"url":"https://b.com","label":"CI"}]}`
 
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
@@ -726,15 +859,15 @@ func TestHandleWebhook_LegacyLinkNormalized(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"deploy","team_id":"team-1","link":"https://example.com"}`
+	payload := `{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","link":"https://example.com"}`
 
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
@@ -761,20 +894,20 @@ func TestHandleWebhook_ExternalID_NewEvent(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	payload := `{"title":"build started","team_id":"team-1","external_id":"build-123","links":[{"url":"https://ci.com/1","label":"CI"}]}`
+	payload := `{"title":"build started","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"build-123","links":[{"url":"https://ci.com/1","label":"CI"}]}`
 
 	// External ID lookup returns nothing (new event)
-	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVGet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("KVSet", mock.MatchedBy(func(key string) bool {
 		return strings.HasPrefix(key, "event:")
 	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	// Store external ID mapping
-	api.On("KVCompareAndSet", "ext_id:team-1:build-123", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	// Global index (no channels on event)
-	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", "event_index:team-1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
@@ -800,12 +933,12 @@ func TestHandleWebhook_ExternalID_MappingWriteFailure(t *testing.T) {
 	}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "ext_id:team-1:build-123", mock.Anything, mock.AnythingOfType("[]uint8")).
+	api.On("KVGet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123", mock.Anything, mock.AnythingOfType("[]uint8")).
 		Return(false, model.NewAppError("test", "mapping_write_failed", nil, "", 500))
 	api.On("LogError", "Failed to store event", "error", mock.AnythingOfType("string"))
 
-	payload := `{"title":"build started","team_id":"team-1","external_id":"build-123"}`
+	payload := `{"title":"build started","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"build-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
@@ -827,7 +960,7 @@ func TestHandleWebhook_ExternalID_UpdateExisting(t *testing.T) {
 	// Existing event stored under this external ID
 	existingEvent := Event{
 		ID:         "evt-existing",
-		TeamID:     "team-1",
+		TeamID:     "aaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Timestamp:  1000,
 		Title:      "build started",
 		EventType:  "deploy",
@@ -840,13 +973,13 @@ func TestHandleWebhook_ExternalID_UpdateExisting(t *testing.T) {
 	existingJSON, _ := json.Marshal(existingEvent)
 
 	// External ID lookup returns existing event ID
-	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte("evt-existing"), (*model.AppError)(nil))
+	api.On("KVGet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123").Return([]byte("evt-existing"), (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-existing").Return(existingJSON, (*model.AppError)(nil))
 	// Update event store
 	api.On("KVSet", "event:evt-existing", mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
 	// Update index (move to front)
-	api.On("KVGet", "event_index:team-1").Return([]byte(`["other-1","evt-existing","other-2"]`), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team-1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa").Return([]byte(`["other-1","evt-existing","other-2"]`), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	var websocketEventJSON string
 	api.On("PublishWebSocketEvent", "updated_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast")).
 		Run(func(args mock.Arguments) {
@@ -856,7 +989,7 @@ func TestHandleWebhook_ExternalID_UpdateExisting(t *testing.T) {
 		Return()
 
 	// Second webhook: different title, new link
-	payload := `{"title":"build completed","team_id":"team-1","external_id":"build-123","event_type":"success","links":[{"url":"https://ci.com/2","label":"Artifacts"}]}`
+	payload := `{"title":"build completed","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"build-123","event_type":"success","links":[{"url":"https://ci.com/2","label":"Artifacts"}]}`
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
@@ -893,11 +1026,11 @@ func TestHandleWebhook_ExternalID_LookupFailure(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "s3cret"}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("KVGet", "ext_id:team-1:build-123").
+	api.On("KVGet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123").
 		Return([]byte(nil), model.NewAppError("test", "lookup_failed", nil, "", 500))
 	api.On("LogError", "Failed to lookup external ID", "error", mock.AnythingOfType("string"))
 
-	payload := `{"title":"build started","team_id":"team-1","external_id":"build-123"}`
+	payload := `{"title":"build started","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"build-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
@@ -913,12 +1046,12 @@ func TestHandleWebhook_ExternalID_ExistingEventReadFailure(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "s3cret"}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte("evt-existing"), (*model.AppError)(nil))
+	api.On("KVGet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123").Return([]byte("evt-existing"), (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-existing").
 		Return([]byte(nil), model.NewAppError("test", "event_read_failed", nil, "", 500))
 	api.On("LogError", "Failed to get existing event", "error", mock.AnythingOfType("string"))
 
-	payload := `{"title":"build completed","team_id":"team-1","external_id":"build-123"}`
+	payload := `{"title":"build completed","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"build-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
@@ -934,11 +1067,11 @@ func TestHandleWebhook_ExternalID_MissingExistingEvent(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "s3cret"}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("KVGet", "ext_id:team-1:build-123").Return([]byte("evt-missing"), (*model.AppError)(nil))
+	api.On("KVGet", "ext_id:aaaaaaaaaaaaaaaaaaaaaaaaaa:build-123").Return([]byte("evt-missing"), (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-missing").Return([]byte(nil), (*model.AppError)(nil))
 	api.On("LogError", "External ID mapping points to missing event", "event_id", "evt-missing")
 
-	payload := `{"title":"build completed","team_id":"team-1","external_id":"build-123"}`
+	payload := `{"title":"build completed","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"build-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
 	req.Header.Set("X-Webhook-Secret", "s3cret")
 	rec := httptest.NewRecorder()
@@ -973,13 +1106,13 @@ func TestHandleAddReaction(t *testing.T) {
 	p := newTestPlugin(t, api, cfg)
 
 	event := Event{
-		ID: "evt-1", TeamID: "team1", Title: "Test", EventType: "info",
+		ID: "evt-1", TeamID: "cccccccccccccccccccccccccc", Title: "Test", EventType: "info",
 		Timestamp: time.Now().UnixMilli(),
 	}
 	eventJSON, _ := json.Marshal(event)
 
 	api.On("KVGet", "event:evt-1").Return(eventJSON, (*model.AppError)(nil))
-	api.On("GetTeamMember", "team1", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "cccccccccccccccccccccccccc", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
 	api.On("KVCompareAndSet", "event:evt-1", eventJSON, mock.Anything).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "reaction_updated", mock.Anything, mock.Anything).Return()
 
@@ -1005,7 +1138,7 @@ func TestHandleRemoveReaction(t *testing.T) {
 	p := newTestPlugin(t, api, cfg)
 
 	event := Event{
-		ID: "evt-1", TeamID: "team1", Title: "Test", EventType: "info",
+		ID: "evt-1", TeamID: "cccccccccccccccccccccccccc", Title: "Test", EventType: "info",
 		Timestamp: time.Now().UnixMilli(),
 		Reactions: EventReactions{
 			"eyes": ReactionSummary{Count: 1, UserIDs: []string{"user1"}},
@@ -1014,7 +1147,7 @@ func TestHandleRemoveReaction(t *testing.T) {
 	eventJSON, _ := json.Marshal(event)
 
 	api.On("KVGet", "event:evt-1").Return(eventJSON, (*model.AppError)(nil))
-	api.On("GetTeamMember", "team1", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "cccccccccccccccccccccccccc", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
 	api.On("KVCompareAndSet", "event:evt-1", eventJSON, mock.Anything).Return(true, (*model.AppError)(nil))
 	api.On("PublishWebSocketEvent", "reaction_updated", mock.Anything, mock.Anything).Return()
 
@@ -1036,7 +1169,7 @@ func TestHandleGetReactionUsers(t *testing.T) {
 	p := newTestPlugin(t, api, cfg)
 
 	event := Event{
-		ID: "evt-1", TeamID: "team1", Title: "Test", EventType: "info",
+		ID: "evt-1", TeamID: "cccccccccccccccccccccccccc", Title: "Test", EventType: "info",
 		Timestamp: time.Now().UnixMilli(),
 		Reactions: EventReactions{
 			"eyes": ReactionSummary{Count: 2, UserIDs: []string{"user1", "user2"}},
@@ -1045,7 +1178,7 @@ func TestHandleGetReactionUsers(t *testing.T) {
 	eventJSON, _ := json.Marshal(event)
 
 	api.On("KVGet", "event:evt-1").Return(eventJSON, (*model.AppError)(nil))
-	api.On("GetTeamMember", "team1", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
+	api.On("GetTeamMember", "cccccccccccccccccccccccccc", "user1").Return(&model.TeamMember{}, (*model.AppError)(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/evt-1/reactions/eyes", nil)
 	req.Header.Set("Mattermost-User-ID", "user1")
@@ -1137,20 +1270,20 @@ func TestHandleWebhook_WithChannels(t *testing.T) {
 	cfg := &configuration{WebhookSecret: "secret", MaxEventsStored: "100"}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetChannel", "ch1").Return(&model.Channel{Id: "ch1", TeamId: "team1", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
+	api.On("GetChannel", "eeeeeeeeeeeeeeeeeeeeeeeeee").Return(&model.Channel{Id: "eeeeeeeeeeeeeeeeeeeeeeeeee", TeamId: "cccccccccccccccccccccccccc", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
 	api.On("KVSet", mock.MatchedBy(func(key string) bool { return strings.HasPrefix(key, "event:") }), mock.Anything).Return((*model.AppError)(nil))
-	// Channel index for ch1
-	api.On("KVGet", "event_index:team1:ch1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team1:ch1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	// Channel index for eeeeeeeeeeeeeeeeeeeeeeeeee
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc:eeeeeeeeeeeeeeeeeeeeeeeeee").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc:eeeeeeeeeeeeeeeeeeeeeeeeee", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	// Main team index
-	api.On("KVGet", "event_index:team1").Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", "event_index:team1", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
 	// Channel-scoped WebSocket broadcast
 	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
-		return b.ChannelId == "ch1"
+		return b.ChannelId == "eeeeeeeeeeeeeeeeeeeeeeeeee"
 	})).Return()
 
-	body := `{"title":"Deploy","event_type":"deploy","team_id":"team1","channels":["ch1"]}`
+	body := `{"title":"Deploy","event_type":"deploy","team_id":"cccccccccccccccccccccccccc","channels":["eeeeeeeeeeeeeeeeeeeeeeeeee"]}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
 	req.Header.Set("X-Webhook-Secret", "secret")
 	rr := httptest.NewRecorder()
@@ -1159,15 +1292,125 @@ func TestHandleWebhook_WithChannels(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, rr.Code)
 	api.AssertExpectations(t)
 }
+func TestHandleWebhook_WithChannelNames(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetChannelByName", "cccccccccccccccccccccccccc", "town-square", false).Return(&model.Channel{Id: "eeeeeeeeeeeeeeeeeeeeeeeeee", TeamId: "cccccccccccccccccccccccccc", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
+	api.On("GetChannelByName", "cccccccccccccccccccccccccc", "alerts", false).Return(&model.Channel{Id: "ffffffffffffffffffffffffff", TeamId: "cccccccccccccccccccccccccc", Type: model.ChannelTypePrivate}, (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool { return strings.HasPrefix(key, "event:") }), mock.Anything).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc:eeeeeeeeeeeeeeeeeeeeeeeeee").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc:eeeeeeeeeeeeeeeeeeeeeeeeee", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc:ffffffffffffffffffffffffff").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc:ffffffffffffffffffffffffff", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
+		return b.ChannelId == "eeeeeeeeeeeeeeeeeeeeeeeeee" || b.ChannelId == "ffffffffffffffffffffffffff"
+	})).Return().Twice()
+
+	body := `{"title":"Deploy","event_type":"deploy","team_id":"cccccccccccccccccccccccccc","channels":["town-square","alerts"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusCreated, rr.Code)
+	var event ClientEvent
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &event))
+	assert.Equal(t, []string{"eeeeeeeeeeeeeeeeeeeeeeeeee", "ffffffffffffffffffffffffff"}, event.Channels)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_DeduplicatesResolvedChannels(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetChannelByName", "cccccccccccccccccccccccccc", "town-square", false).Return(&model.Channel{Id: "eeeeeeeeeeeeeeeeeeeeeeeeee", TeamId: "cccccccccccccccccccccccccc", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
+	api.On("GetChannel", "eeeeeeeeeeeeeeeeeeeeeeeeee").Return(&model.Channel{Id: "eeeeeeeeeeeeeeeeeeeeeeeeee", TeamId: "cccccccccccccccccccccccccc", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
+	api.On("KVSet", mock.MatchedBy(func(key string) bool { return strings.HasPrefix(key, "event:") }), mock.Anything).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc:eeeeeeeeeeeeeeeeeeeeeeeeee").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc:eeeeeeeeeeeeeeeeeeeeeeeeee", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:cccccccccccccccccccccccccc").Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:cccccccccccccccccccccccccc", mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.MatchedBy(func(b *model.WebsocketBroadcast) bool {
+		return b.ChannelId == "eeeeeeeeeeeeeeeeeeeeeeeeee"
+	})).Return().Once()
+
+	body := `{"title":"Deploy","event_type":"deploy","team_id":"cccccccccccccccccccccccccc","channels":["town-square","eeeeeeeeeeeeeeeeeeeeeeeeee"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusCreated, rr.Code)
+	var event ClientEvent
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &event))
+	assert.Equal(t, []string{"eeeeeeeeeeeeeeeeeeeeeeeeee"}, event.Channels)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsBlankChannel(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret"}
+	p := newTestPlugin(t, api, cfg)
+
+	body := `{"title":"Test","event_type":"info","team_id":"cccccccccccccccccccccccccc","channels":[" "]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Channel ID or name cannot be empty")
+}
+
+func TestHandleWebhook_RejectsChannelNameFromDifferentTeam(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetChannelByName", "cccccccccccccccccccccccccc", "town-square", false).Return(&model.Channel{Id: "eeeeeeeeeeeeeeeeeeeeeeeeee", TeamId: "dddddddddddddddddddddddddd", Type: model.ChannelTypeOpen}, (*model.AppError)(nil))
+
+	body := `{"title":"Test","event_type":"info","team_id":"cccccccccccccccccccccccccc","channels":["town-square"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Channel town-square does not belong to team cccccccccccccccccccccccccc")
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsUnknownChannelName(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "secret"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetChannelByName", "cccccccccccccccccccccccccc", "missing", false).Return((*model.Channel)(nil), model.NewAppError("test", "not_found", nil, "", http.StatusNotFound))
+
+	body := `{"title":"Test","event_type":"info","team_id":"cccccccccccccccccccccccccc","channels":["missing"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "secret")
+	rr := httptest.NewRecorder()
+	p.router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Invalid channel ID or name: missing")
+	api.AssertExpectations(t)
+}
 
 func TestHandleWebhook_RejectsDMChannel(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{WebhookSecret: "secret"}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetChannel", "dm1").Return(&model.Channel{Id: "dm1", TeamId: "team1", Type: model.ChannelTypeDirect}, (*model.AppError)(nil))
+	api.On("GetChannel", "gggggggggggggggggggggggggg").Return(&model.Channel{Id: "gggggggggggggggggggggggggg", TeamId: "cccccccccccccccccccccccccc", Type: model.ChannelTypeDirect}, (*model.AppError)(nil))
 
-	body := `{"title":"Test","event_type":"info","team_id":"team1","channels":["dm1"]}`
+	body := `{"title":"Test","event_type":"info","team_id":"cccccccccccccccccccccccccc","channels":["gggggggggggggggggggggggggg"]}`
 	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
 	req.Header.Set("X-Webhook-Secret", "secret")
 	rr := httptest.NewRecorder()
@@ -1187,7 +1430,7 @@ func TestHandleWebhook_TooManyChannels(t *testing.T) {
 		channels[i] = fmt.Sprintf("ch%d", i)
 	}
 	body, _ := json.Marshal(map[string]interface{}{
-		"title": "Test", "event_type": "info", "team_id": "team1", "channels": channels,
+		"title": "Test", "event_type": "info", "team_id": "cccccccccccccccccccccccccc", "channels": channels,
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))

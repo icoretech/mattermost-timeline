@@ -6,6 +6,8 @@ server/manifest.go
 
 # Dependencies
 webapp/node_modules/
+__pycache__/
+*.py[cod]
 
 # Mac
 .DS_Store
@@ -31,5 +33,11 @@ docs/
 # Misc
 AGENTS.md
 .superpowers/
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/mattermost-timeline-dev-smoke/
+!.agents/skills/mattermost-timeline-dev-smoke/**
+.agents/skills/mattermost-timeline-dev-smoke/**/__pycache__/
+.agents/skills/mattermost-timeline-dev-smoke/**/*.py[cod]
 .sisyphus/

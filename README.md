@@ -75,7 +75,7 @@ After enabling the plugin, configure it in **System Console > Plugins > Mattermo
 Send events to the plugin via HTTP POST:
 
 ```bash
-curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-timeline/webhook?team_id=TEAM_ID \
+curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-timeline/webhook?team_id=TEAM_ID_OR_NAME \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Secret: YOUR_SECRET" \
   -d '{
@@ -93,7 +93,7 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
 #### Channel-Scoped Event
 
 ```bash
-curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-timeline/webhook?team_id=TEAM_ID \
+curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-timeline/webhook?team_id=TEAM_ID_OR_NAME \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Secret: YOUR_SECRET" \
   -d '{
@@ -101,7 +101,7 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
     "message": "All tests passed. Ready for review.",
     "event_type": "deploy",
     "source": "ci/cd",
-    "channels": ["CHANNEL_ID_1", "CHANNEL_ID_2"]
+    "channels": ["CHANNEL_ID_OR_NAME_1", "CHANNEL_ID_OR_NAME_2"]
   }'
 ```
 
@@ -116,8 +116,8 @@ curl -X POST https://your-mattermost.example.com/plugins/ch.icorete.mattermost-t
 | `event_type` | string | no | One of: `host_online`, `host_offline`, `deploy`, `alert`, `error`, `info`, `success`, `money_in`, `money_out`, `security`, `incident`, `user_joined`, `user_left`, `scheduled`, `review`, `message`, `generic` |
 | `source` | string | no | Source system label (e.g., "monitoring", "ci/cd") |
 | `external_id` | string | no | Idempotency key. Subsequent webhooks with the same `external_id` update the existing event (fields are replaced, links are aggregated) |
-| `team_id` | string | no | Team ID (can also be passed as `?team_id=` query param) |
-| `channels` | array | no | Array of channel IDs (max 10). When set, the event appears only in those channels' timelines. Without this field, events are team-wide. |
+| `team_id` | string | no | Team ID or team name/slug (can also be passed as `?team_id=` query param) |
+| `channels` | array | no | Array of channel IDs or channel names (max 10). When set, the event appears only in those channels' timelines. Without this field, events are team-wide. |
 
 ## Development
 
@@ -163,6 +163,40 @@ cd webapp && npm run lint
 cd webapp && npm run biome:ci
 cd webapp && npm run typecheck
 ```
+
+### Local Mattermost preview stack
+
+A Docker Compose development stack is included for real Mattermost smoke tests:
+
+```bash
+.agents/skills/mattermost-timeline-dev-smoke/scripts/bootstrap-dev-mattermost.sh
+```
+
+It starts `mattermost/mattermost-preview` behind a local nginx proxy at
+`http://localhost:18065`, provisions `admin@example.com / Password1!`, and
+prints the deploy, configure, and webhook smoke-test commands.
+
+After `make deploy`, configure the local webhook secret and send/read back a
+sample event with:
+
+```bash
+MM_SERVICESETTINGS_SITEURL=http://localhost:18065 \
+MM_ADMIN_USERNAME=admin@example.com \
+MM_ADMIN_PASSWORD='Password1!' \
+TIMELINE_WEBHOOK_SECRET='timeline-smoke-secret' \
+.agents/skills/mattermost-timeline-dev-smoke/scripts/configure-plugin.py
+
+MM_SERVICESETTINGS_SITEURL=http://localhost:18065 \
+MM_ADMIN_USERNAME=admin@example.com \
+MM_ADMIN_PASSWORD='Password1!' \
+TIMELINE_WEBHOOK_SECRET='timeline-smoke-secret' \
+.agents/skills/mattermost-timeline-dev-smoke/scripts/post-sample-event.py
+```
+
+Set `TIMELINE_CHANNEL_SCOPE=true` on `post-sample-event.py` to verify a
+channel-scoped event. The helper resolves the team and channel by name, posts to
+the webhook, then confirms the created event is returned by the plugin API.
+
 
 ### Deploy to a Mattermost instance
 
@@ -224,31 +258,34 @@ redacts secret plugin settings in API responses, so do not rely on the config AP
 to recover it later.
 
 ```bash
-export TEAM_ID='team-id'
-export CHANNEL_ID='' # optional; set for a channel-scoped event
+export WEBHOOK_TEAM='team-id-or-name'
+export WEBHOOK_CHANNEL='' # optional; channel ID or channel name for a channel-scoped event
+export READBACK_TEAM_ID='real-team-id'
+export READBACK_CHANNEL_ID='' # optional; real channel ID matching WEBHOOK_CHANNEL
 export WEBHOOK_SECRET='configured-webhook-secret'
 export EXTERNAL_ID="timeline-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
 
 jq -n \
   --arg external_id "$EXTERNAL_ID" \
-  --arg channel_id "$CHANNEL_ID" \
+  --arg channel "$WEBHOOK_CHANNEL" \
   '{
     title: "Timeline smoke test",
     message: "Deployment smoke test.",
     event_type: "info",
     source: "smoke-test",
     external_id: $external_id,
-    channels: (if $channel_id == "" then [] else [$channel_id] end)
+    channels: (if $channel == "" then [] else [$channel] end)
   }' |
   curl -sS -X POST \
-    "$MM_SERVICESETTINGS_SITEURL/plugins/ch.icorete.mattermost-timeline/webhook?team_id=$TEAM_ID" \
+    "$MM_SERVICESETTINGS_SITEURL/plugins/ch.icorete.mattermost-timeline/webhook?team_id=$WEBHOOK_TEAM" \
     -H "Content-Type: application/json" \
     -H "X-Webhook-Secret: $WEBHOOK_SECRET" \
     --data-binary @-
 
+# The webhook accepts team/channel names, but the authenticated readback API uses Mattermost IDs.
 curl -sS \
   -H "Authorization: Bearer $MM_ADMIN_TOKEN" \
-  "$MM_SERVICESETTINGS_SITEURL/plugins/ch.icorete.mattermost-timeline/api/v1/events?team_id=$TEAM_ID&channel_id=$CHANNEL_ID&limit=10" |
+  "$MM_SERVICESETTINGS_SITEURL/plugins/ch.icorete.mattermost-timeline/api/v1/events?team_id=$READBACK_TEAM_ID&channel_id=$READBACK_CHANNEL_ID&limit=10" |
   jq --arg external_id "$EXTERNAL_ID" '.events[] | select(.external_id == $external_id)'
 ```
 

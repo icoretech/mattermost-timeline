@@ -95,6 +95,77 @@ type webhookHandlerError struct {
 	status  int
 }
 
+func (p *Plugin) resolveWebhookTeamID(teamIdentifier string) (string, *webhookHandlerError) {
+	teamIdentifier = strings.TrimSpace(teamIdentifier)
+	if teamIdentifier == "" {
+		return "", &webhookHandlerError{message: "team_id is required (query param or JSON field)", status: http.StatusBadRequest}
+	}
+
+	if model.IsValidId(teamIdentifier) {
+		team, appErr := p.API.GetTeam(teamIdentifier)
+		if appErr == nil && team != nil {
+			return team.Id, nil
+		}
+		if appErr != nil && appErr.StatusCode != http.StatusNotFound {
+			return "", &webhookHandlerError{message: fmt.Sprintf("Failed to resolve team ID: %s", teamIdentifier), status: http.StatusInternalServerError}
+		}
+	}
+
+	team, appErr := p.API.GetTeamByName(teamIdentifier)
+	if appErr != nil || team == nil {
+		return "", &webhookHandlerError{message: fmt.Sprintf("Invalid team ID or name: %s", teamIdentifier), status: http.StatusBadRequest}
+	}
+
+	return team.Id, nil
+}
+
+func (p *Plugin) resolveWebhookChannelIDs(teamID string, channelIdentifiers []string) ([]string, *webhookHandlerError) {
+	if len(channelIdentifiers) > maxChannelsPerEvent {
+		return nil, &webhookHandlerError{message: fmt.Sprintf("Maximum %d channels per event", maxChannelsPerEvent), status: http.StatusBadRequest}
+	}
+
+	channelIDs := make([]string, 0, len(channelIdentifiers))
+	seen := make(map[string]bool, len(channelIdentifiers))
+	for _, channelIdentifier := range channelIdentifiers {
+		channelID, handlerErr := p.resolveWebhookChannelID(teamID, channelIdentifier)
+		if handlerErr != nil {
+			return nil, handlerErr
+		}
+		if !seen[channelID] {
+			seen[channelID] = true
+			channelIDs = append(channelIDs, channelID)
+		}
+	}
+
+	return channelIDs, nil
+}
+
+func (p *Plugin) resolveWebhookChannelID(teamID, channelIdentifier string) (string, *webhookHandlerError) {
+	channelIdentifier = strings.TrimSpace(channelIdentifier)
+	if channelIdentifier == "" {
+		return "", &webhookHandlerError{message: "Channel ID or name cannot be empty", status: http.StatusBadRequest}
+	}
+
+	var ch *model.Channel
+	var appErr *model.AppError
+	if model.IsValidId(channelIdentifier) {
+		ch, appErr = p.API.GetChannel(channelIdentifier)
+	} else {
+		ch, appErr = p.API.GetChannelByName(teamID, channelIdentifier, false)
+	}
+	if appErr != nil || ch == nil {
+		return "", &webhookHandlerError{message: fmt.Sprintf("Invalid channel ID or name: %s", channelIdentifier), status: http.StatusBadRequest}
+	}
+	if ch.TeamId != teamID {
+		return "", &webhookHandlerError{message: fmt.Sprintf("Channel %s does not belong to team %s", channelIdentifier, teamID), status: http.StatusBadRequest}
+	}
+	if ch.Type == model.ChannelTypeDirect || ch.Type == model.ChannelTypeGroup {
+		return "", &webhookHandlerError{message: fmt.Sprintf("DM/GM channels are not supported: %s", channelIdentifier), status: http.StatusBadRequest}
+	}
+
+	return ch.Id, nil
+}
+
 func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 	validated, handlerErr := p.validateWebhookRequest(w, r, config)
@@ -136,34 +207,26 @@ func (p *Plugin) validateWebhookRequest(w http.ResponseWriter, r *http.Request, 
 		return validatedWebhookRequest{}, &webhookHandlerError{message: "Title is required", status: http.StatusBadRequest}
 	}
 
-	teamID := r.URL.Query().Get("team_id")
-	if teamID == "" {
-		teamID = payload.TeamID
+	teamIdentifier := r.URL.Query().Get("team_id")
+	if teamIdentifier == "" {
+		teamIdentifier = payload.TeamID
 	}
-	if teamID == "" {
-		return validatedWebhookRequest{}, &webhookHandlerError{message: "team_id is required (query param or JSON field)", status: http.StatusBadRequest}
+	teamID, handlerErr := p.resolveWebhookTeamID(teamIdentifier)
+	if handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
 	}
+	payload.TeamID = teamID
 
 	eventType := payload.EventType
 	if eventType == "" {
 		eventType = "generic"
 	}
 
-	if len(payload.Channels) > maxChannelsPerEvent {
-		return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("Maximum %d channels per event", maxChannelsPerEvent), status: http.StatusBadRequest}
+	channelIDs, handlerErr := p.resolveWebhookChannelIDs(teamID, payload.Channels)
+	if handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
 	}
-	for _, chID := range payload.Channels {
-		ch, appErr := p.API.GetChannel(chID)
-		if appErr != nil {
-			return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("Invalid channel ID: %s", chID), status: http.StatusBadRequest}
-		}
-		if ch.TeamId != teamID {
-			return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("Channel %s does not belong to team %s", chID, teamID), status: http.StatusBadRequest}
-		}
-		if ch.Type == model.ChannelTypeDirect || ch.Type == model.ChannelTypeGroup {
-			return validatedWebhookRequest{}, &webhookHandlerError{message: fmt.Sprintf("DM/GM channels are not supported: %s", chID), status: http.StatusBadRequest}
-		}
-	}
+	payload.Channels = channelIDs
 
 	return validatedWebhookRequest{
 		teamID:        teamID,
