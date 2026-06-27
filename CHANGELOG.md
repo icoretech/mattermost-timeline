@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0](https://github.com/icoretech/mattermost-timeline/compare/v1.4.4...v1.5.0) (2026-06-27)
+
+
+### Features
+
+* add unread activity badge to event feed ([693c349](https://github.com/icoretech/mattermost-timeline/commit/693c3499e93a031c56359bb5bd607067b5121ac6))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/mattermost/mattermost/server/public to v0.4.3 ([#110](https://github.com/icoretech/mattermost-timeline/issues/110)) ([0fa6de1](https://github.com/icoretech/mattermost-timeline/commit/0fa6de1a035ad026c35712c5ade9f9bc22e3d61b))
+
 ## [1.4.4](https://github.com/icoretech/mattermost-timeline/compare/v1.4.3...v1.4.4) (2026-06-25)
 
 
