@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   HYDRATE_POPOUT_STATE,
+  MARK_EVENTS_READ,
+  RECEIVED_UNREAD_EVENTS,
   SET_CURRENT_USER_ID,
   SET_VIEW_CONTEXT,
 } from "./actions";
@@ -10,6 +12,7 @@ describe("plugin entrypoint", () => {
   afterEach(() => {
     vi.resetModules();
     Reflect.deleteProperty(window, "registerPlugin");
+    Reflect.deleteProperty(window, "WebappUtils");
   });
 
   it("registers the plugin on load", async () => {
@@ -150,6 +153,21 @@ describe("plugin entrypoint", () => {
         pluginState,
       }),
     );
+
+    popoutListener?.("team-name", "channel-name", {
+      sendToPopout,
+      onMessageFromPopout: (callback) =>
+        callback("TIMELINE_MARK_CONTEXT_READ", {
+          teamId: "team123",
+          eventIds: ["event-1"],
+        }),
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: MARK_EVENTS_READ,
+      teamId: "team123",
+      eventIds: ["event-1"],
+    });
   });
 
   it("ignores invalid popout plugin state instead of hydrating it", async () => {
@@ -225,6 +243,94 @@ describe("plugin entrypoint", () => {
 
     expect(dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: HYDRATE_POPOUT_STATE }),
+    );
+  });
+
+  it("routes timeline websocket events to unread state and ignores reactions", async () => {
+    const registerPlugin = vi.fn();
+    const dispatch = vi.fn();
+    const handlers = new Map<
+      string,
+      (message: { data: Record<string, string> }) => void
+    >();
+
+    window.registerPlugin = registerPlugin;
+
+    await import("./index");
+
+    const plugin = registerPlugin.mock.calls[0][1] as {
+      initialize: (registry: unknown, store: unknown) => void;
+    };
+    const store = {
+      dispatch,
+      getState: () => ({
+        entities: {
+          users: { currentUserId: "user123" },
+          teams: { currentTeamId: "team123" },
+          channels: { currentChannelId: "channel123" },
+        },
+      }),
+    };
+    const registry = {
+      registerReducer: vi.fn(),
+      registerRightHandSidebarComponent: vi.fn(() => ({
+        toggleRHSPlugin: { type: "toggle_rhs" },
+      })),
+      registerChannelHeaderButtonAction: vi.fn(),
+      registerRHSPluginPopoutListener: undefined,
+      registerWebSocketEventHandler: vi.fn((eventName, handler) => {
+        handlers.set(eventName, handler);
+      }),
+    };
+
+    plugin.initialize(registry, store);
+
+    const newEvent = {
+      id: "event-1",
+      team_id: "team123",
+      timestamp: 1000,
+      title: "new event",
+      event_type: "info",
+      channels: ["channel123"],
+    };
+    handlers.get(`custom_${manifest.id}_new_event`)?.({
+      data: { event: JSON.stringify(newEvent) },
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: RECEIVED_UNREAD_EVENTS,
+        events: [newEvent],
+      }),
+    );
+
+    dispatch.mockClear();
+    const updatedEvent = { ...newEvent, timestamp: 2000 };
+    handlers.get(`custom_${manifest.id}_updated_event`)?.({
+      data: { event: JSON.stringify(updatedEvent) },
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: RECEIVED_UNREAD_EVENTS,
+        events: [updatedEvent],
+      }),
+    );
+
+    dispatch.mockClear();
+    handlers.get(`custom_${manifest.id}_reaction_updated`)?.({
+      data: {
+        payload: JSON.stringify({
+          event_id: "event-1",
+          icon: "eyes",
+          count: 1,
+          user_ids: ["user123"],
+        }),
+      },
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: RECEIVED_UNREAD_EVENTS }),
     );
   });
 });

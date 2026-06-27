@@ -27,6 +27,7 @@ If this plugin saves you dashboard-hopping, [star the repo](https://github.com/i
 - **Less channel noise** — keep machine-generated updates out of the message stream while still making them visible to the team
 - **Team-wide or channel-specific timelines** — post an event to the whole team, or target one or more channels by name or ID
 - **Update events instead of duplicating them** — send the same `external_id` to turn "deploy started" into "deploy finished" or "incident open" into "incident resolved"
+- **Unread activity at a glance** — the channel-header Timeline icon shows a red dot when unseen timeline events arrive while the sidebar is closed
 - **Fast triage links** — attach dashboards, CI runs, status pages, invoices, logs, or runbooks directly to each timeline item
 - **Low-friction acknowledgement** — users can react with icons such as eyes, wrench, check, megaphone, thumbs-up, party, and heart without creating extra threads
 - **Self-hosted Mattermost plugin** — no external timeline service; events are stored in Mattermost plugin storage

@@ -5,18 +5,77 @@ import {
   CLEAR_NEW_EVENT_FLAG,
   CLEAR_UPDATED_EVENT_FLAG,
   HYDRATE_POPOUT_STATE,
+  MARK_EVENTS_READ,
   OPTIMISTIC_REACTION,
+  RECEIVED_CONTEXT_UNREAD_EVENTS,
   RECEIVED_EVENT_REACTIONS,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
   RECEIVED_REACTION_UPDATED,
+  RECEIVED_UNREAD_EVENTS,
   RECEIVED_UPDATED_EVENT,
   SET_CURRENT_USER_ID,
   SET_ERROR,
   SET_LOADING,
   SET_VIEW_CONTEXT,
 } from "./actions";
-import type { EventEntry } from "./types/timeline";
+import { getTimelineContextKey } from "./selectors";
+import type { EventEntry, TimelineUnreadState } from "./types/timeline";
+
+function dedupeIds(ids: string[]): string[] {
+  return Array.from(new Set(ids));
+}
+
+function eventContextKeys(event: EventEntry): string[] {
+  if (!event.channels || event.channels.length === 0) {
+    return [getTimelineContextKey(event.team_id, "")];
+  }
+
+  return event.channels.map((channelId) =>
+    getTimelineContextKey(event.team_id, channelId),
+  );
+}
+
+function removeIdsForTeam(
+  state: TimelineUnreadState,
+  teamId: string,
+  eventIds: string[],
+): TimelineUnreadState {
+  if (eventIds.length === 0) {
+    return state;
+  }
+
+  const idsToRemove = new Set(eventIds);
+  const teamPrefix = `${teamId}:`;
+  let changed = false;
+  const nextState: TimelineUnreadState = { ...state };
+
+  for (const [contextKey, ids] of Object.entries(state)) {
+    if (!contextKey.startsWith(teamPrefix)) {
+      continue;
+    }
+    const filtered = ids.filter((id) => !idsToRemove.has(id));
+    if (filtered.length !== ids.length) {
+      changed = true;
+      nextState[contextKey] = filtered;
+    }
+  }
+
+  return changed ? nextState : state;
+}
+
+function reconcileUnreadContext(
+  state: TimelineUnreadState,
+  teamId: string,
+  channelId: string,
+  visibleEventIds: string[],
+  unreadEventIds: string[],
+): TimelineUnreadState {
+  return {
+    ...removeIdsForTeam(state, teamId, visibleEventIds),
+    [getTimelineContextKey(teamId, channelId)]: dedupeIds(unreadEventIds),
+  };
+}
 
 function events(
   state: EventEntry[] = [],
@@ -177,6 +236,51 @@ function updatedEventIds(
   }
 }
 
+function unreadEventIdsByContext(
+  state: TimelineUnreadState = {},
+  action: EventFeedAction,
+): TimelineUnreadState {
+  switch (action.type) {
+    case RECEIVED_EVENTS:
+      if (!action.teamId) {
+        return state;
+      }
+      return reconcileUnreadContext(
+        state,
+        action.teamId,
+        action.channelId || "",
+        action.events.map((event) => event.id),
+        action.unreadEventIds || [],
+      );
+    case RECEIVED_CONTEXT_UNREAD_EVENTS:
+      return reconcileUnreadContext(
+        state,
+        action.teamId,
+        action.channelId,
+        action.visibleEventIds,
+        action.unreadEventIds,
+      );
+    case RECEIVED_UNREAD_EVENTS: {
+      const nextState: TimelineUnreadState = { ...state };
+      for (const event of action.events) {
+        for (const contextKey of eventContextKeys(event)) {
+          nextState[contextKey] = dedupeIds([
+            ...(nextState[contextKey] || []),
+            event.id,
+          ]);
+        }
+      }
+      return nextState;
+    }
+    case MARK_EVENTS_READ:
+      return removeIdsForTeam(state, action.teamId, action.eventIds);
+    case HYDRATE_POPOUT_STATE:
+      return action.hydratedState.unreadEventIdsByContext || {};
+    default:
+      return state;
+  }
+}
+
 function error(
   state: string | null = null,
   action: EventFeedAction,
@@ -266,6 +370,7 @@ const eventFeedReducer = combineReducers({
   total,
   newEventIds,
   updatedEventIds,
+  unreadEventIdsByContext,
   timelineOrder,
   enableReactions,
   currentUserId,

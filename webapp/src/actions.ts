@@ -12,7 +12,9 @@ import {
 import type {
   EventEntry,
   EventFeedState,
+  HydratableEventFeedState,
   ReactionClientSummary,
+  TimelineReadState,
 } from "./types/timeline";
 
 const pluginId = manifest.id as "ch.icorete.mattermost-timeline";
@@ -39,6 +41,11 @@ export const CLEAR_EVENTS = actionType("clear_events");
 export const SET_CURRENT_USER_ID = actionType("set_current_user_id");
 export const SET_VIEW_CONTEXT = actionType("set_view_context");
 export const HYDRATE_POPOUT_STATE = actionType("hydrate_popout_state");
+export const RECEIVED_CONTEXT_UNREAD_EVENTS = actionType(
+  "received_context_unread_events",
+);
+export const RECEIVED_UNREAD_EVENTS = actionType("received_unread_events");
+export const MARK_EVENTS_READ = actionType("mark_events_read");
 
 export type TimelineOrder = EventFeedState["timelineOrder"];
 
@@ -49,6 +56,7 @@ export type ReceivedEventsAction = {
   append?: boolean;
   timelineOrder?: TimelineOrder;
   enableReactions?: boolean;
+  unreadEventIds?: string[];
   teamId?: string;
   channelId?: string;
 };
@@ -101,9 +109,25 @@ export type SetViewContextAction = {
 };
 export type HydratePopoutStateAction = {
   type: typeof HYDRATE_POPOUT_STATE;
-  hydratedState: EventFeedState;
+  hydratedState: HydratableEventFeedState;
   teamId: string;
   channelId: string;
+};
+export type ReceivedContextUnreadEventsAction = {
+  type: typeof RECEIVED_CONTEXT_UNREAD_EVENTS;
+  teamId: string;
+  channelId: string;
+  visibleEventIds: string[];
+  unreadEventIds: string[];
+};
+export type ReceivedUnreadEventsAction = {
+  type: typeof RECEIVED_UNREAD_EVENTS;
+  events: EventEntry[];
+};
+export type MarkEventsReadAction = {
+  type: typeof MARK_EVENTS_READ;
+  teamId: string;
+  eventIds: string[];
 };
 
 export type EventFeedAction =
@@ -120,7 +144,10 @@ export type EventFeedAction =
   | ClearEventsAction
   | SetCurrentUserIdAction
   | SetViewContextAction
-  | HydratePopoutStateAction;
+  | HydratePopoutStateAction
+  | ReceivedContextUnreadEventsAction
+  | ReceivedUnreadEventsAction
+  | MarkEventsReadAction;
 
 export type EventFeedDispatch = Dispatch<EventFeedAction>;
 export type EventFeedThunk<TReturn = void> = (
@@ -136,6 +163,7 @@ type FetchEventsOptions = {
 
 type EventsResponse = {
   events: EventEntry[];
+  unread_events?: EventEntry[];
   total: number;
   timeline_order?: TimelineOrder;
   enable_reactions?: boolean;
@@ -152,6 +180,53 @@ type ReactionUsersResponse = {
   user_ids: string[];
 };
 
+function isFiniteNumberMap(value: unknown): value is Record<string, number> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every(
+      (item) => typeof item === "number" && Number.isFinite(item),
+    )
+  );
+}
+
+type TimelineReadStateResponse = {
+  version: number;
+  context_read_at?: Record<string, number>;
+  seen_events?: Record<string, number>;
+};
+
+function isOptionalFiniteNumberMap(
+  value: unknown,
+): value is Record<string, number> | undefined {
+  return value === undefined || isFiniteNumberMap(value);
+}
+
+function isTimelineReadStateResponse(
+  value: unknown,
+): value is TimelineReadStateResponse {
+  return (
+    isRecord(value) &&
+    typeof value.version === "number" &&
+    Number.isFinite(value.version) &&
+    isOptionalFiniteNumberMap(value.context_read_at) &&
+    isOptionalFiniteNumberMap(value.seen_events)
+  );
+}
+
+async function parseTimelineReadStateResponse(
+  response: Response,
+): Promise<TimelineReadState> {
+  const data: unknown = await response.json();
+  if (!isTimelineReadStateResponse(data)) {
+    throw new Error("Invalid read state response");
+  }
+  return {
+    version: data.version,
+    context_read_at: data.context_read_at || {},
+    seen_events: data.seen_events || {},
+  };
+}
+
 function isEventsResponse(value: unknown): value is EventsResponse {
   if (!isRecord(value)) {
     return false;
@@ -160,6 +235,9 @@ function isEventsResponse(value: unknown): value is EventsResponse {
   return (
     Array.isArray(value.events) &&
     value.events.every(isEventEntry) &&
+    (value.unread_events === undefined ||
+      (Array.isArray(value.unread_events) &&
+        value.unread_events.every(isEventEntry))) &&
     typeof value.total === "number" &&
     Number.isFinite(value.total) &&
     (value.timeline_order === undefined ||
@@ -244,6 +322,7 @@ export function fetchEvents(
         append: offset > 0,
         timelineOrder: data.timeline_order || "oldest_first",
         enableReactions: data.enable_reactions,
+        unreadEventIds: (data.unread_events || []).map((event) => event.id),
         teamId,
         channelId: channelId || "",
       });
@@ -328,6 +407,86 @@ export function clearUpdatedEventFlag(
   eventId: string,
 ): ClearUpdatedEventFlagAction {
   return { type: CLEAR_UPDATED_EVENT_FLAG, eventId };
+}
+
+export function receivedUnreadEvents(
+  events: EventEntry[],
+): ReceivedUnreadEventsAction {
+  return { type: RECEIVED_UNREAD_EVENTS, events };
+}
+
+export function markEventsRead(
+  teamId: string,
+  eventIds: string[],
+): MarkEventsReadAction {
+  return { type: MARK_EVENTS_READ, teamId, eventIds };
+}
+
+export function refreshUnreadEvents(
+  teamId: string,
+  channelId = "",
+): EventFeedThunk {
+  return async (dispatch: EventFeedDispatch) => {
+    if (!teamId) {
+      return;
+    }
+
+    try {
+      let url = `/plugins/${manifest.id}/api/v1/events?team_id=${encodeURIComponent(teamId)}&offset=0&limit=50`;
+      if (channelId) {
+        url += `&channel_id=${encodeURIComponent(channelId)}`;
+      }
+      const response = await fetch(url, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to refresh unread events");
+      }
+      const data: unknown = await response.json();
+      if (!isEventsResponse(data)) {
+        throw new Error("Invalid events response");
+      }
+      dispatch({
+        type: RECEIVED_CONTEXT_UNREAD_EVENTS,
+        teamId,
+        channelId,
+        visibleEventIds: data.events.map((event) => event.id),
+        unreadEventIds: (data.unread_events || []).map((event) => event.id),
+      });
+    } catch (error) {
+      console.error("Event Feed: failed to refresh unread events", error);
+    }
+  };
+}
+
+export function markVisibleEventsRead(
+  teamId: string,
+  channelId: string,
+  eventIds: string[],
+): EventFeedThunk<Promise<void>> {
+  return async (dispatch: EventFeedDispatch) => {
+    if (!teamId || eventIds.length === 0) {
+      return;
+    }
+
+    const response = await fetch(`/plugins/${manifest.id}/api/v1/events/read`, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        team_id: teamId,
+        channel_id: channelId || undefined,
+        event_ids: eventIds,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to mark events read");
+    }
+    await parseTimelineReadStateResponse(response);
+    dispatch(markEventsRead(teamId, eventIds));
+  };
 }
 
 export function addReaction(eventId: string, icon: string) {
@@ -471,7 +630,7 @@ export function setViewContext(
 }
 
 export function hydratePopoutState(
-  hydratedState: EventFeedState,
+  hydratedState: HydratableEventFeedState,
   teamId: string,
   channelId = "",
 ): HydratePopoutStateAction {

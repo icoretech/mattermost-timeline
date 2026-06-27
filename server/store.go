@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -11,12 +12,23 @@ import (
 )
 
 const (
-	eventKeyPrefix = "event:"
-	indexKeyPrefix = "event_index:"
-	extIDKeyPrefix = "ext_id:"
+	eventKeyPrefix     = "event:"
+	indexKeyPrefix     = "event_index:"
+	extIDKeyPrefix     = "ext_id:"
+	readStateKeyPrefix = "read_state:"
 )
 
 const maxIndexMutationRetries = 3
+
+const readStateCurrentVersion = 1
+
+const globalReadContextKey = "_global"
+
+type TimelineReadState struct {
+	Version       int              `json:"version"`
+	ContextReadAt map[string]int64 `json:"context_read_at,omitempty"`
+	SeenEvents    map[string]int64 `json:"seen_events,omitempty"`
+}
 
 var errExternalIDAlreadyExists = errors.New("external ID mapping already exists")
 
@@ -65,6 +77,202 @@ func channelIndexKey(teamID, channelID string) string {
 
 func globalIndexKey(teamID string) string {
 	return indexKeyPrefix + teamID + ":" + globalChannelSuffix
+}
+
+func readStateKey(userID, teamID string) string {
+	return readStateKeyPrefix + userID + ":" + teamID
+}
+
+func readStateContextKey(channelID string) string {
+	if channelID == "" {
+		return globalReadContextKey
+	}
+	return channelID
+}
+
+func emptyTimelineReadState() TimelineReadState {
+	return TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{},
+		SeenEvents:    map[string]int64{},
+	}
+}
+
+func normalizeTimelineReadState(state TimelineReadState) TimelineReadState {
+	if state.Version == 0 {
+		state.Version = readStateCurrentVersion
+	}
+	if state.ContextReadAt == nil {
+		state.ContextReadAt = map[string]int64{}
+	}
+	if state.SeenEvents == nil {
+		state.SeenEvents = map[string]int64{}
+	}
+	return state
+}
+
+func maxEventTimestamp(events []Event) int64 {
+	var maxTimestamp int64
+	for _, event := range events {
+		if event.Timestamp > maxTimestamp {
+			maxTimestamp = event.Timestamp
+		}
+	}
+	return maxTimestamp
+}
+
+func (s *EventStore) GetReadState(userID, teamID string) (TimelineReadState, error) {
+	data, appErr := s.api.KVGet(readStateKey(userID, teamID))
+	if appErr != nil {
+		return TimelineReadState{}, fmt.Errorf("failed to get read state: %w", appErr)
+	}
+	if data == nil {
+		return emptyTimelineReadState(), nil
+	}
+
+	var state TimelineReadState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return TimelineReadState{}, fmt.Errorf("failed to unmarshal read state: %w", err)
+	}
+
+	return normalizeTimelineReadState(state), nil
+}
+
+func (s *EventStore) mutateReadState(userID, teamID, operation string, mutate func(*TimelineReadState) bool) (TimelineReadState, error) {
+	key := readStateKey(userID, teamID)
+	for attempt := 0; attempt < maxIndexMutationRetries; attempt++ {
+		data, appErr := s.api.KVGet(key)
+		if appErr != nil {
+			return TimelineReadState{}, fmt.Errorf("failed to %s: %w", operation, appErr)
+		}
+
+		state := emptyTimelineReadState()
+		if data != nil {
+			if err := json.Unmarshal(data, &state); err != nil {
+				return TimelineReadState{}, fmt.Errorf("failed to unmarshal read state: %w", err)
+			}
+			state = normalizeTimelineReadState(state)
+		}
+
+		if !mutate(&state) {
+			return state, nil
+		}
+
+		state.Version = readStateCurrentVersion
+		nextData, err := json.Marshal(state)
+		if err != nil {
+			return TimelineReadState{}, fmt.Errorf("failed to %s: %w", operation, err)
+		}
+
+		ok, appErr := s.api.KVCompareAndSet(key, data, nextData)
+		if appErr != nil {
+			return TimelineReadState{}, fmt.Errorf("failed to %s: %w", operation, appErr)
+		}
+		if ok {
+			return state, nil
+		}
+	}
+
+	return TimelineReadState{}, fmt.Errorf("failed to %s after %d retries (conflict)", operation, maxIndexMutationRetries)
+}
+
+func (s *EventStore) GetUnreadEventsForContext(userID, teamID, channelID string, events []Event, baselineTimestamp int64) ([]Event, TimelineReadState, error) {
+	contextKey := readStateContextKey(channelID)
+	state, err := s.GetReadState(userID, teamID)
+	if err != nil {
+		return nil, TimelineReadState{}, err
+	}
+
+	if _, initialized := state.ContextReadAt[contextKey]; !initialized {
+		initializedContext := false
+		initializedState, err := s.mutateReadState(userID, teamID, "initialize read state", func(current *TimelineReadState) bool {
+			initializedContext = false
+			if _, ok := current.ContextReadAt[contextKey]; ok {
+				return false
+			}
+			current.ContextReadAt[contextKey] = baselineTimestamp
+			initializedContext = true
+			return true
+		})
+		if err != nil {
+			return nil, TimelineReadState{}, err
+		}
+		if initializedContext {
+			return []Event{}, initializedState, nil
+		}
+		return unreadEventsForState(contextKey, initializedState, events), initializedState, nil
+	}
+
+	return unreadEventsForState(contextKey, state, events), state, nil
+}
+
+func unreadEventsForState(contextKey string, state TimelineReadState, events []Event) []Event {
+	contextReadAt := state.ContextReadAt[contextKey]
+	unreadEvents := make([]Event, 0, len(events))
+	for _, event := range events {
+		if event.Timestamp > contextReadAt && state.SeenEvents[event.ID] < event.Timestamp {
+			unreadEvents = append(unreadEvents, event)
+		}
+	}
+	return unreadEvents
+}
+
+func (s *EventStore) MarkEventsRead(userID, teamID, channelID string, events []Event) (TimelineReadState, error) {
+	contextKey := readStateContextKey(channelID)
+	return s.mutateReadState(userID, teamID, "mark events read", func(state *TimelineReadState) bool {
+		if len(events) == 0 {
+			return false
+		}
+
+		changed := false
+		if _, ok := state.ContextReadAt[contextKey]; !ok {
+			state.ContextReadAt[contextKey] = 0
+			changed = true
+		}
+
+		for _, event := range events {
+			if state.SeenEvents[event.ID] < event.Timestamp {
+				state.SeenEvents[event.ID] = event.Timestamp
+				changed = true
+			}
+		}
+
+		return pruneSeenEvents(state, s.maxEventsLimit()) || changed
+	})
+}
+
+type seenEventEntry struct {
+	ID        string
+	Timestamp int64
+}
+
+func pruneSeenEvents(state *TimelineReadState, maxEvents int) bool {
+	basis := maxEvents
+	if basis <= 0 {
+		basis = 500
+	}
+	maxSeenEvents := basis * 2
+	if len(state.SeenEvents) <= maxSeenEvents {
+		return false
+	}
+
+	entries := make([]seenEventEntry, 0, len(state.SeenEvents))
+	for id, timestamp := range state.SeenEvents {
+		entries = append(entries, seenEventEntry{ID: id, Timestamp: timestamp})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Timestamp == entries[j].Timestamp {
+			return entries[i].ID < entries[j].ID
+		}
+		return entries[i].Timestamp > entries[j].Timestamp
+	})
+
+	pruned := make(map[string]int64, maxSeenEvents)
+	for _, entry := range entries[:maxSeenEvents] {
+		pruned[entry.ID] = entry.Timestamp
+	}
+	state.SeenEvents = pruned
+	return true
 }
 
 func (s *EventStore) loadEventsFromIndex(key string, offset, limit int) ([]Event, int, error) {

@@ -31,6 +31,30 @@ func newTestPlugin(t *testing.T, api *plugintest.API, cfg *configuration) *Plugi
 	return p
 }
 
+func expectExistingReadState(api *plugintest.API, userID, teamID string, state TimelineReadState) {
+	api.On("KVGet", readStateKey(userID, teamID)).Return(mustMarshalReadStateForAPI(state), (*model.AppError)(nil)).Once()
+}
+
+func expectReadStateInitialization(t *testing.T, api *plugintest.API, userID, teamID, channelID string, baselineTimestamp int64) {
+	t.Helper()
+	key := readStateKey(userID, teamID)
+	api.On("KVGet", key).Return([]byte(nil), (*model.AppError)(nil)).Once()
+	api.On("KVGet", key).Return([]byte(nil), (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", key, []byte(nil), mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		return state.ContextReadAt[readStateContextKey(channelID)] == baselineTimestamp
+	})).Return(true, (*model.AppError)(nil)).Once()
+}
+
+func mustMarshalReadStateForAPI(state TimelineReadState) []byte {
+	data, err := json.Marshal(state)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 // --- Webhook endpoint tests ---
 
 func TestHandleWebhook_ValidRequest(t *testing.T) {
@@ -405,13 +429,14 @@ func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
 		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
-	evt := Event{ID: "evt-1", Title: "test", EventType: "deploy"}
+	evt := Event{ID: "evt-1", TeamID: "aaaaaaaaaaaaaaaaaaaaaaaaaa", Timestamp: 100, Title: "test", EventType: "deploy"}
 	evtJSON, _ := json.Marshal(evt)
 	ids := []string{"evt-1"}
 	indexData, _ := json.Marshal(ids)
 
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-1").Return(evtJSON, (*model.AppError)(nil))
+	expectReadStateInitialization(t, api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "", 100)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -427,6 +452,7 @@ func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	assert.Equal(t, 1, resp.Total)
 	assert.Equal(t, "evt-1", resp.Events[0].ID)
 	assert.Equal(t, TimelineOrderOldestFirst, resp.TimelineOrder)
+	assert.Empty(t, resp.UnreadEvents)
 	api.AssertExpectations(t)
 }
 
@@ -457,6 +483,11 @@ func TestHandleGetEvents_ProjectsReactionSummaries(t *testing.T) {
 
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-1").Return(evtJSON, (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 0},
+		SeenEvents:    map[string]int64{},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -502,6 +533,11 @@ func TestHandleGetEvents_WithoutChannelIDUsesTeamWideIndex(t *testing.T) {
 
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-global").Return(evtJSON, (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 0},
+		SeenEvents:    map[string]int64{},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -530,6 +566,11 @@ func TestHandleGetEvents_TimelineOrder(t *testing.T) {
 	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
 		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 0},
+		SeenEvents:    map[string]int64{},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -612,6 +653,11 @@ func TestHandleGetEvents_WithPagination(t *testing.T) {
 
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return(indexData, (*model.AppError)(nil))
 	api.On("KVGet", "event:evt-2").Return(evt2JSON, (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 0},
+		SeenEvents:    map[string]int64{},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&offset=1&limit=1", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -628,6 +674,51 @@ func TestHandleGetEvents_WithPagination(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestHandleGetEvents_ReturnsUnreadEventsAfterBaselineExists(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		MaxEventsStored:    "100",
+		MaxEventsDisplayed: "50",
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetChannelMember", "channel-1", "user-1").
+		Return(&model.ChannelMember{ChannelId: "channel-1", UserId: "user-1"}, (*model.AppError)(nil))
+
+	channelIndexData, _ := json.Marshal([]string{"evt-channel"})
+	globalIndexData, _ := json.Marshal([]string{"evt-global"})
+	channelEvent := Event{ID: "evt-channel", TeamID: "team-1", Timestamp: 200, Title: "channel", EventType: "deploy", Channels: []string{"channel-1"}}
+	globalEvent := Event{ID: "evt-global", TeamID: "team-1", Timestamp: 150, Title: "global", EventType: "deploy"}
+	channelEventJSON, _ := json.Marshal(channelEvent)
+	globalEventJSON, _ := json.Marshal(globalEvent)
+
+	api.On("KVGet", "event_index:team-1:channel-1").Return(channelIndexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return(globalIndexData, (*model.AppError)(nil))
+	api.On("KVGet", "event:evt-channel").Return(channelEventJSON, (*model.AppError)(nil))
+	api.On("KVGet", "event:evt-global").Return(globalEventJSON, (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "team-1", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"channel-1": 100},
+		SeenEvents:    map[string]int64{"evt-global": 150},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=team-1&channel_id=channel-1", nil)
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp EventsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Events, 2)
+	require.Len(t, resp.UnreadEvents, 1)
+	assert.Equal(t, "evt-channel", resp.UnreadEvents[0].ID)
+	api.AssertExpectations(t)
+}
+
 func TestHandleGetEvents_DefaultLimit(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{
@@ -639,6 +730,11 @@ func TestHandleGetEvents_DefaultLimit(t *testing.T) {
 	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
 		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 0},
+		SeenEvents:    map[string]int64{},
+	})
 
 	// No limit param => defaults to 50
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
@@ -660,9 +756,6 @@ func TestHandleGetEvents_NegativeOffsetRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
-		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
-
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&offset=-1", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
@@ -681,9 +774,6 @@ func TestHandleGetEvents_InvalidOffsetRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
-		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
-
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&offset=abc", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
@@ -699,9 +789,6 @@ func TestHandleGetEvents_InvalidLimitRejected(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
-
-	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
-		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&limit=abc", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
@@ -719,9 +806,6 @@ func TestHandleGetEvents_NonPositiveLimitRejected(t *testing.T) {
 	cfg := &configuration{}
 	p := newTestPlugin(t, api, cfg)
 
-	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
-		Return(&model.TeamMember{TeamId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", UserId: "user-1"}, (*model.AppError)(nil))
-
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa&limit=0", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")
 	rec := httptest.NewRecorder()
@@ -731,6 +815,168 @@ func TestHandleGetEvents_NonPositiveLimitRejected(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "limit must be positive")
 	api.AssertExpectations(t)
+}
+
+func TestHandleMarkEventsRead_RequiresAuthAndMembership(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{MaxEventsStored: "100", MaxEventsDisplayed: "50"}
+	p := newTestPlugin(t, api, cfg)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(`{"team_id":"team-1","event_ids":[]}`))
+	rec := httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return((*model.TeamMember)(nil), model.NewAppError("test", "not_found", nil, "", http.StatusNotFound))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(`{"team_id":"team-1","event_ids":[]}`))
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec = httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Not a member of this team")
+
+	api.AssertExpectations(t)
+}
+
+func TestHandleMarkEventsRead_RequiresChannelMembership(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{MaxEventsStored: "100", MaxEventsDisplayed: "50"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetChannelMember", "channel-1", "user-1").
+		Return((*model.ChannelMember)(nil), model.NewAppError("test", "not_found", nil, "", http.StatusNotFound))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(`{"team_id":"team-1","channel_id":"channel-1","event_ids":[]}`))
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Not a member of this channel")
+	api.AssertExpectations(t)
+}
+
+func TestHandleMarkEventsRead_EmptyIDsMarksVisibleEvents(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{MaxEventsStored: "100", MaxEventsDisplayed: "50"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	indexData, _ := json.Marshal([]string{"evt-visible"})
+	visibleEvent := Event{ID: "evt-visible", TeamID: "team-1", Timestamp: 100, Title: "visible", EventType: "deploy"}
+	visibleEventJSON, _ := json.Marshal(visibleEvent)
+	api.On("KVGet", "event_index:team-1:_global").Return(indexData, (*model.AppError)(nil))
+	api.On("KVGet", "event:evt-visible").Return(visibleEventJSON, (*model.AppError)(nil))
+	api.On("KVGet", readStateKey("user-1", "team-1")).Return([]byte(nil), (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", readStateKey("user-1", "team-1"), []byte(nil), mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		return state.ContextReadAt["_global"] == 0 && state.SeenEvents["evt-visible"] == 100
+	})).Return(true, (*model.AppError)(nil)).Once()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(`{"team_id":"team-1","event_ids":[]}`))
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var state TimelineReadState
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &state))
+	assert.Equal(t, int64(100), state.SeenEvents["evt-visible"])
+	api.AssertExpectations(t)
+}
+
+func TestHandleMarkEventsRead_ExplicitIDsIgnoresOutsideContext(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{MaxEventsStored: "100", MaxEventsDisplayed: "50"}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("GetTeamMember", "team-1", "user-1").
+		Return(&model.TeamMember{TeamId: "team-1", UserId: "user-1"}, (*model.AppError)(nil))
+	api.On("GetChannelMember", "channel-1", "user-1").
+		Return(&model.ChannelMember{ChannelId: "channel-1", UserId: "user-1"}, (*model.AppError)(nil))
+	channelIndexData, _ := json.Marshal([]string{"evt-visible"})
+	api.On("KVGet", "event_index:team-1:channel-1").Return(channelIndexData, (*model.AppError)(nil))
+	api.On("KVGet", "event_index:team-1:_global").Return([]byte(nil), (*model.AppError)(nil))
+
+	visibleEvent := Event{ID: "evt-visible", TeamID: "team-1", Timestamp: 100, Title: "visible", EventType: "deploy", Channels: []string{"channel-1"}}
+	visibleEventJSON, _ := json.Marshal(visibleEvent)
+	api.On("KVGet", "event:evt-visible").Return(visibleEventJSON, (*model.AppError)(nil))
+	readStateJSON := mustMarshalReadStateForAPI(TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"channel-1": 50},
+		SeenEvents:    map[string]int64{},
+	})
+	api.On("KVGet", readStateKey("user-1", "team-1")).Return(readStateJSON, (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", readStateKey("user-1", "team-1"), readStateJSON, mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		_, outsideMarked := state.SeenEvents["evt-outside"]
+		_, otherTeamMarked := state.SeenEvents["evt-other-team"]
+		return state.ContextReadAt["channel-1"] == 50 && state.SeenEvents["evt-visible"] == 100 && !outsideMarked && !otherTeamMarked
+	})).Return(true, (*model.AppError)(nil)).Once()
+
+	body := `{"team_id":"team-1","channel_id":"channel-1","event_ids":["evt-visible","evt-hidden","evt-outside","evt-other-team","evt-missing"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(body))
+	req.Header.Set("Mattermost-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var state TimelineReadState
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &state))
+	assert.Equal(t, map[string]int64{"evt-visible": 100}, state.SeenEvents)
+	api.AssertNotCalled(t, "KVGet", "event:evt-outside")
+	api.AssertNotCalled(t, "KVGet", "event:evt-hidden")
+	api.AssertNotCalled(t, "KVGet", "event:evt-other-team")
+	api.AssertNotCalled(t, "KVGet", "event:evt-missing")
+	api.AssertExpectations(t)
+}
+
+func TestHandleMarkEventsRead_RejectsInvalidPayloads(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{MaxEventsStored: "100", MaxEventsDisplayed: "50"}
+	p := newTestPlugin(t, api, cfg)
+
+	t.Run("invalid JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(`{`))
+		req.Header.Set("Mattermost-User-ID", "user-1")
+		rec := httptest.NewRecorder()
+		p.router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Invalid JSON payload")
+	})
+
+	t.Run("missing team", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", strings.NewReader(`{"event_ids":[]}`))
+		req.Header.Set("Mattermost-User-ID", "user-1")
+		rec := httptest.NewRecorder()
+		p.router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "team_id is required")
+	})
+
+	t.Run("too many ids", func(t *testing.T) {
+		eventIDs := make([]string, 101)
+		for i := range eventIDs {
+			eventIDs[i] = fmt.Sprintf("evt-%d", i)
+		}
+		payload, err := json.Marshal(markEventsReadRequest{TeamID: "team-1", EventIDs: eventIDs})
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/events/read", bytes.NewReader(payload))
+		req.Header.Set("Mattermost-User-ID", "user-1")
+		rec := httptest.NewRecorder()
+		p.router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "too many event_ids")
+	})
 }
 
 func TestHandleWebhook_RejectsOversizedBody(t *testing.T) {
@@ -768,6 +1014,11 @@ func TestMattermostAuthRequired_WithUserID(t *testing.T) {
 	api.On("GetTeamMember", "aaaaaaaaaaaaaaaaaaaaaaaaaa", "user-1").
 		Return(&model.TeamMember{}, (*model.AppError)(nil))
 	api.On("KVGet", "event_index:aaaaaaaaaaaaaaaaaaaaaaaaaa:_global").Return([]byte(nil), (*model.AppError)(nil))
+	expectExistingReadState(api, "user-1", "aaaaaaaaaaaaaaaaaaaaaaaaaa", TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 0},
+		SeenEvents:    map[string]int64{},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?team_id=aaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
 	req.Header.Set("Mattermost-User-ID", "user-1")

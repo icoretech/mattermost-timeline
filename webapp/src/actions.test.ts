@@ -6,15 +6,19 @@ import {
   clearNewEventFlag,
   fetchEvents,
   fetchReactionUsers,
+  MARK_EVENTS_READ,
+  markVisibleEventsRead,
   OPTIMISTIC_REACTION,
   parseNewEventWebSocket,
   parseReactionWebSocket,
   parseUpdatedEventWebSocket,
+  RECEIVED_CONTEXT_UNREAD_EVENTS,
   RECEIVED_EVENT_REACTIONS,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
   RECEIVED_REACTION_UPDATED,
   receivedNewEvent,
+  refreshUnreadEvents,
   removeReaction,
   SET_ERROR,
   SET_LOADING,
@@ -299,6 +303,11 @@ describe("fetchEvents", () => {
     expect(types[1]).toBe(SET_ERROR);
     expect(types[2]).toBe(RECEIVED_EVENTS);
     expect(types[3]).toBe(SET_LOADING);
+
+    const receivedAction = mockDispatch.mock.calls.find(
+      (c: unknown[]) => (c[0] as { type: string }).type === RECEIVED_EVENTS,
+    );
+    expect(receivedAction?.[0]).toMatchObject({ unreadEventIds: [] });
   });
 
   it("dispatches error on fetch failure", async () => {
@@ -385,5 +394,129 @@ describe("fetchEvents", () => {
     );
     expect(receivedAction).toBeDefined();
     expect((receivedAction?.[0] as { append: boolean }).append).toBe(true);
+  });
+});
+
+describe("unread thunks", () => {
+  const mockDispatch = vi.fn();
+
+  beforeEach(() => {
+    mockDispatch.mockClear();
+    globalThis.fetch = vi.fn();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("refreshUnreadEvents dispatches context unread ids without SET_ERROR", async () => {
+    const events = [
+      {
+        id: "e1",
+        team_id: "t1",
+        timestamp: 1000,
+        title: "visible",
+        event_type: "info",
+      },
+    ];
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ events, unread_events: events, total: 1 }),
+    } as Response);
+
+    await refreshUnreadEvents("t1", "c1")(mockDispatch);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/plugins/ch.icorete.mattermost-timeline/api/v1/events?team_id=t1&offset=0&limit=50&channel_id=c1",
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+    );
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: RECEIVED_CONTEXT_UNREAD_EVENTS,
+      teamId: "t1",
+      channelId: "c1",
+      visibleEventIds: ["e1"],
+      unreadEventIds: ["e1"],
+    });
+    expect(
+      mockDispatch.mock.calls.some(
+        (c: unknown[]) => (c[0] as { type: string }).type === SET_ERROR,
+      ),
+    ).toBe(false);
+  });
+
+  it("refreshUnreadEvents logs failures without dispatching", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue({ ok: false } as Response);
+
+    await refreshUnreadEvents("t1")(mockDispatch);
+
+    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(
+      "Event Feed: failed to refresh unread events",
+      expect.any(Error),
+    );
+  });
+
+  it("markVisibleEventsRead posts to the server before clearing locally", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          version: 1,
+          context_read_at: { c1: 1000 },
+          seen_events: { e1: 1000 },
+        }),
+    } as Response);
+
+    await markVisibleEventsRead("t1", "c1", ["e1"])(mockDispatch);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/plugins/ch.icorete.mattermost-timeline/api/v1/events/read",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          team_id: "t1",
+          channel_id: "c1",
+          event_ids: ["e1"],
+        }),
+      }),
+    );
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: MARK_EVENTS_READ,
+      teamId: "t1",
+      eventIds: ["e1"],
+    });
+  });
+
+  it("markVisibleEventsRead accepts omitted empty read-state maps", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ version: 1 }),
+    } as Response);
+
+    await markVisibleEventsRead("t1", "", ["e1"])(mockDispatch);
+
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: MARK_EVENTS_READ,
+      teamId: "t1",
+      eventIds: ["e1"],
+    });
+  });
+
+  it("markVisibleEventsRead rejects invalid read state responses", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ version: 1, context_read_at: { c1: Number.NaN } }),
+    } as Response);
+
+    await expect(
+      markVisibleEventsRead("t1", "", ["e1"])(mockDispatch),
+    ).rejects.toThrow("Invalid read state response");
+    expect(mockDispatch).not.toHaveBeenCalled();
   });
 });

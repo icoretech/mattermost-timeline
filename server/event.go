@@ -92,6 +92,7 @@ type WebhookPayload struct {
 // EventsResponse is returned by the GET /api/v1/events endpoint.
 type EventsResponse struct {
 	Events          []ClientEvent `json:"events"`
+	UnreadEvents    []ClientEvent `json:"unread_events"`
 	Total           int           `json:"total"`
 	TimelineOrder   TimelineOrder `json:"timeline_order"`
 	EnableReactions bool          `json:"enable_reactions"`

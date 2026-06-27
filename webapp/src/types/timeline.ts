@@ -27,6 +27,14 @@ export interface EventEntry {
   channels?: string[];
 }
 
+export type TimelineReadState = {
+  version: number;
+  context_read_at: Record<string, number>;
+  seen_events: Record<string, number>;
+};
+
+export type TimelineUnreadState = Record<string, string[]>;
+
 export interface EventFeedState {
   events: EventEntry[];
   isLoading: boolean;
@@ -34,12 +42,20 @@ export interface EventFeedState {
   total: number;
   newEventIds: string[];
   updatedEventIds: string[];
+  unreadEventIdsByContext: TimelineUnreadState;
   timelineOrder: "oldest_first" | "newest_first";
   enableReactions: boolean;
   currentUserId: string;
   viewTeamId: string;
   viewChannelId: string;
 }
+
+export type HydratableEventFeedState = Omit<
+  EventFeedState,
+  "unreadEventIdsByContext"
+> & {
+  unreadEventIdsByContext?: TimelineUnreadState;
+};
 
 export type TimelineUser = Pick<
   UserProfile,

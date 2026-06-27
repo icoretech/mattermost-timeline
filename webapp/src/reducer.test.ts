@@ -3,10 +3,13 @@ import {
   CLEAR_EVENTS,
   CLEAR_NEW_EVENT_FLAG,
   HYDRATE_POPOUT_STATE,
+  MARK_EVENTS_READ,
   OPTIMISTIC_REACTION,
+  RECEIVED_CONTEXT_UNREAD_EVENTS,
   RECEIVED_EVENT_REACTIONS,
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
+  RECEIVED_UNREAD_EVENTS,
   RECEIVED_UPDATED_EVENT,
   SET_ERROR,
   SET_LOADING,
@@ -38,6 +41,7 @@ describe("reducer", () => {
       total: 0,
       newEventIds: [],
       updatedEventIds: [],
+      unreadEventIdsByContext: {},
       timelineOrder: "oldest_first",
       enableReactions: true,
       currentUserId: "",
@@ -58,6 +62,7 @@ describe("reducer", () => {
         total: 1,
         newEventIds: ["e2"],
         updatedEventIds: [],
+        unreadEventIdsByContext: { "team123:channel123": ["e2"] },
         timelineOrder: "newest_first",
         enableReactions: false,
         currentUserId: "user123",
@@ -72,6 +77,9 @@ describe("reducer", () => {
     expect(state.currentUserId).toBe("user123");
     expect(state.viewTeamId).toBe("team123");
     expect(state.viewChannelId).toBe("channel123");
+    expect(state.unreadEventIdsByContext).toEqual({
+      "team123:channel123": ["e2"],
+    });
   });
 
   describe("events", () => {
@@ -169,6 +177,84 @@ describe("reducer", () => {
       expect(state.events).toHaveLength(1);
       expect(state.total).toBe(1);
       expect(state.newEventIds).toEqual([]);
+    });
+  });
+
+  describe("unreadEventIdsByContext", () => {
+    it("stores current-context unread ids from RECEIVED_EVENTS", () => {
+      const state = reducer(initial, {
+        type: RECEIVED_EVENTS,
+        events: [makeEvent({ id: "e1" }), makeEvent({ id: "e2" })],
+        total: 2,
+        teamId: "t1",
+        channelId: "c1",
+        unreadEventIds: ["e2", "e2"],
+      });
+
+      expect(state.unreadEventIdsByContext).toEqual({ "t1:c1": ["e2"] });
+    });
+
+    it("reconciles context unread refresh without setting error state", () => {
+      const existing = reducer(initial, {
+        type: RECEIVED_UNREAD_EVENTS,
+        events: [
+          makeEvent({ id: "e1", channels: ["c1"] }),
+          makeEvent({ id: "e2", channels: ["c2"] }),
+        ],
+      });
+
+      const state = reducer(existing, {
+        type: RECEIVED_CONTEXT_UNREAD_EVENTS,
+        teamId: "t1",
+        channelId: "c1",
+        visibleEventIds: ["e1", "e3"],
+        unreadEventIds: ["e3"],
+      });
+
+      expect(state.error).toBeNull();
+      expect(state.unreadEventIdsByContext).toEqual({
+        "t1:c1": ["e3"],
+        "t1:c2": ["e2"],
+      });
+    });
+
+    it("routes websocket unread events by event context", () => {
+      const state = reducer(initial, {
+        type: RECEIVED_UNREAD_EVENTS,
+        events: [
+          makeEvent({ id: "channel-b", channels: ["b"] }),
+          makeEvent({ id: "team-wide", channels: [] }),
+          makeEvent({ id: "multi", channels: ["a", "b"] }),
+        ],
+      });
+
+      expect(state.unreadEventIdsByContext).toEqual({
+        "t1:b": ["channel-b", "multi"],
+        "t1:_global": ["team-wide"],
+        "t1:a": ["multi"],
+      });
+    });
+
+    it("clears read ids from every bucket for the team", () => {
+      const existing = reducer(initial, {
+        type: RECEIVED_UNREAD_EVENTS,
+        events: [
+          makeEvent({ id: "multi", channels: ["a", "b"] }),
+          makeEvent({ id: "other-team", team_id: "t2", channels: ["a"] }),
+        ],
+      });
+
+      const state = reducer(existing, {
+        type: MARK_EVENTS_READ,
+        teamId: "t1",
+        eventIds: ["multi"],
+      });
+
+      expect(state.unreadEventIdsByContext).toEqual({
+        "t1:a": [],
+        "t1:b": [],
+        "t2:a": ["other-team"],
+      });
     });
   });
 

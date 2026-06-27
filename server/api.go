@@ -25,6 +25,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
 	apiRouter.Use(p.mattermostAuthRequired)
 	apiRouter.HandleFunc("/events", p.handleGetEvents).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/events/read", p.handleMarkEventsRead).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/events/{eventId}/reactions/{icon}", p.handleAddReaction).Methods(http.MethodPut)
 	apiRouter.HandleFunc("/events/{eventId}/reactions/{icon}", p.handleRemoveReaction).Methods(http.MethodDelete)
 	apiRouter.HandleFunc("/events/{eventId}/reactions/{icon}", p.handleGetReactionUsers).Methods(http.MethodGet)
@@ -93,6 +94,12 @@ type storedWebhookEvent struct {
 type webhookHandlerError struct {
 	message string
 	status  int
+}
+
+type markEventsReadRequest struct {
+	TeamID    string   `json:"team_id"`
+	ChannelID string   `json:"channel_id,omitempty"`
+	EventIDs  []string `json:"event_ids"`
 }
 
 func (p *Plugin) resolveWebhookTeamID(teamIdentifier string) (string, *webhookHandlerError) {
@@ -328,18 +335,37 @@ func (p *Plugin) publishAndWriteTimelineEventResponse(w http.ResponseWriter, sta
 	_, _ = w.Write(responseJSON)
 }
 
+func (p *Plugin) getVisibleEventsForUser(userID, teamID, channelID string, offset, limit int) ([]Event, int, *webhookHandlerError) {
+	if _, appErr := p.API.GetTeamMember(teamID, userID); appErr != nil {
+		return nil, 0, &webhookHandlerError{message: "Not a member of this team", status: http.StatusForbidden}
+	}
+
+	if channelID != "" {
+		if _, appErr := p.API.GetChannelMember(channelID, userID); appErr != nil {
+			return nil, 0, &webhookHandlerError{message: "Not a member of this channel", status: http.StatusForbidden}
+		}
+	}
+
+	var events []Event
+	var total int
+	var err error
+	if channelID != "" {
+		events, total, err = p.store.GetEventsByChannel(teamID, channelID, offset, limit)
+	} else {
+		events, total, err = p.store.GetGlobalEvents(teamID, offset, limit)
+	}
+	if err != nil {
+		p.API.LogError("Failed to get events", "error", err.Error())
+		return nil, 0, &webhookHandlerError{message: "Failed to get events", status: http.StatusInternalServerError}
+	}
+
+	return events, total, nil
+}
+
 func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	teamID := r.URL.Query().Get("team_id")
 	if teamID == "" {
 		http.Error(w, "team_id is required", http.StatusBadRequest)
-		return
-	}
-
-	// Verify user is a member of the team
-	userID := r.Header.Get("Mattermost-User-ID")
-	_, appErr := p.API.GetTeamMember(teamID, userID)
-	if appErr != nil {
-		http.Error(w, "Not a member of this team", http.StatusForbidden)
 		return
 	}
 
@@ -378,32 +404,28 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 		limit = maxDisplay
 	}
 
+	userID := r.Header.Get("Mattermost-User-ID")
 	channelID := r.URL.Query().Get("channel_id")
-
-	if channelID != "" {
-		if _, appErr := p.API.GetChannelMember(channelID, userID); appErr != nil {
-			http.Error(w, "Not a member of this channel", http.StatusForbidden)
-			return
-		}
+	events, total, handlerErr := p.getVisibleEventsForUser(userID, teamID, channelID, offset, limit)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
 	}
 
-	var events []Event
-	var total int
-	var err error
-
-	if channelID != "" {
-		events, total, err = p.store.GetEventsByChannel(teamID, channelID, offset, limit)
-	} else {
-		events, total, err = p.store.GetGlobalEvents(teamID, offset, limit)
+	baselineTimestamp := maxEventTimestamp(events)
+	if baselineTimestamp == 0 {
+		baselineTimestamp = time.Now().UnixMilli()
 	}
+	unreadEvents, _, err := p.store.GetUnreadEventsForContext(userID, teamID, channelID, events, baselineTimestamp)
 	if err != nil {
-		p.API.LogError("Failed to get events", "error", err.Error())
+		p.API.LogError("Failed to get read state", "error", err.Error())
 		http.Error(w, "Failed to get events", http.StatusInternalServerError)
 		return
 	}
 
 	resp := EventsResponse{
 		Events:          clientEventsFrom(events, userID),
+		UnreadEvents:    clientEventsFrom(unreadEvents, userID),
 		Total:           total,
 		TimelineOrder:   config.timelineOrder(),
 		EnableReactions: config.enableReactions(),
@@ -412,5 +434,74 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		p.API.LogError("Failed to encode events response", "error", err.Error())
+	}
+}
+
+func eventVisibleInContext(event Event, teamID, channelID string) bool {
+	if event.TeamID != teamID {
+		return false
+	}
+	if channelID == "" {
+		return len(event.Channels) == 0
+	}
+	if len(event.Channels) == 0 {
+		return true
+	}
+	for _, eventChannelID := range event.Channels {
+		if eventChannelID == channelID {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Plugin) handleMarkEventsRead(w http.ResponseWriter, r *http.Request) {
+	var payload markEventsReadRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	if payload.TeamID == "" {
+		http.Error(w, "team_id is required", http.StatusBadRequest)
+		return
+	}
+	if len(payload.EventIDs) > 100 {
+		http.Error(w, "too many event_ids", http.StatusBadRequest)
+		return
+	}
+
+	userID := r.Header.Get("Mattermost-User-ID")
+	config := p.getConfiguration()
+	visibleEvents, _, handlerErr := p.getVisibleEventsForUser(userID, payload.TeamID, payload.ChannelID, 0, config.maxEventsDisplayedInt())
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	selectedEvents := visibleEvents
+	if len(payload.EventIDs) > 0 {
+		requestedEventIDs := make(map[string]struct{}, len(payload.EventIDs))
+		for _, eventID := range payload.EventIDs {
+			requestedEventIDs[eventID] = struct{}{}
+		}
+
+		selectedEvents = make([]Event, 0, len(visibleEvents))
+		for _, event := range visibleEvents {
+			if _, ok := requestedEventIDs[event.ID]; ok {
+				selectedEvents = append(selectedEvents, event)
+			}
+		}
+	}
+
+	readState, err := p.store.MarkEventsRead(userID, payload.TeamID, payload.ChannelID, selectedEvents)
+	if err != nil {
+		p.API.LogError("Failed to mark events read", "error", err.Error())
+		http.Error(w, "Failed to mark events read", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(readState); err != nil {
+		p.API.LogError("Failed to encode read state response", "error", err.Error())
 	}
 }

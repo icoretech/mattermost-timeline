@@ -862,6 +862,182 @@ func TestIndexMutationRetriesCompareAndSetConflict(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestReadStateInitializesContextAndReturnsLaterUnreadEvents(t *testing.T) {
+	api := &plugintest.API{}
+	store := NewEventStore(api, 100)
+	key := readStateKey("user-1", "team-1")
+	initialEvents := []Event{{ID: "evt-old", TeamID: "team-1", Timestamp: 100, Title: "old", EventType: "deploy"}}
+
+	api.On("KVGet", key).Return([]byte(nil), (*model.AppError)(nil)).Once()
+	api.On("KVGet", key).Return([]byte(nil), (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", key, []byte(nil), mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		return state.Version == readStateCurrentVersion && state.ContextReadAt["channel-1"] == 100 && len(state.SeenEvents) == 0
+	})).Return(true, (*model.AppError)(nil)).Once()
+
+	unread, state, err := store.GetUnreadEventsForContext("user-1", "team-1", "channel-1", initialEvents, maxEventTimestamp(initialEvents))
+
+	require.NoError(t, err)
+	assert.Empty(t, unread)
+	assert.Equal(t, int64(100), state.ContextReadAt["channel-1"])
+
+	storedState, _ := json.Marshal(TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"channel-1": 100},
+		SeenEvents:    map[string]int64{},
+	})
+	laterEvents := []Event{
+		{ID: "evt-new", TeamID: "team-1", Timestamp: 150, Title: "new", EventType: "deploy"},
+		{ID: "evt-old", TeamID: "team-1", Timestamp: 100, Title: "old", EventType: "deploy"},
+	}
+	api.On("KVGet", key).Return(storedState, (*model.AppError)(nil)).Once()
+
+	unread, state, err = store.GetUnreadEventsForContext("user-1", "team-1", "channel-1", laterEvents, maxEventTimestamp(laterEvents))
+
+	require.NoError(t, err)
+	require.Len(t, unread, 1)
+	assert.Equal(t, "evt-new", unread[0].ID)
+	assert.Equal(t, int64(100), state.ContextReadAt["channel-1"])
+	api.AssertExpectations(t)
+}
+
+func TestReadStateConcurrentInitializationRecomputesUnreadEvents(t *testing.T) {
+	api := &plugintest.API{}
+	store := NewEventStore(api, 100)
+	key := readStateKey("user-1", "team-1")
+	events := []Event{
+		{ID: "evt-new", TeamID: "team-1", Timestamp: 150, Title: "new", EventType: "deploy"},
+		{ID: "evt-old", TeamID: "team-1", Timestamp: 100, Title: "old", EventType: "deploy"},
+	}
+	concurrentState, _ := json.Marshal(TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"channel-1": 100},
+		SeenEvents:    map[string]int64{},
+	})
+
+	api.On("KVGet", key).Return([]byte(nil), (*model.AppError)(nil)).Once()
+	api.On("KVGet", key).Return(concurrentState, (*model.AppError)(nil)).Once()
+
+	unread, state, err := store.GetUnreadEventsForContext("user-1", "team-1", "channel-1", events, maxEventTimestamp(events))
+
+	require.NoError(t, err)
+	require.Len(t, unread, 1)
+	assert.Equal(t, "evt-new", unread[0].ID)
+	assert.Equal(t, int64(100), state.ContextReadAt["channel-1"])
+	api.AssertNotCalled(t, "KVCompareAndSet", key, mock.Anything, mock.Anything)
+	api.AssertExpectations(t)
+}
+
+func TestMarkEventsReadKeepsHigherTimestampsAndSuppressesCrossChannelDuplicates(t *testing.T) {
+	api := &plugintest.API{}
+	store := NewEventStore(api, 100)
+	key := readStateKey("user-1", "team-1")
+	storedState, _ := json.Marshal(TimelineReadState{
+		Version: readStateCurrentVersion,
+		ContextReadAt: map[string]int64{
+			"channel-a": 10,
+			"channel-b": 10,
+		},
+		SeenEvents: map[string]int64{"evt-updated": 50},
+	})
+	api.On("KVGet", key).Return(storedState, (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", key, storedState, mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		return state.ContextReadAt["channel-a"] == 10 && state.SeenEvents["evt-multi"] == 20 && state.SeenEvents["evt-updated"] == 50
+	})).Return(true, (*model.AppError)(nil)).Once()
+
+	state, err := store.MarkEventsRead("user-1", "team-1", "channel-a", []Event{
+		{ID: "evt-multi", TeamID: "team-1", Timestamp: 20, Channels: []string{"channel-a", "channel-b"}},
+		{ID: "evt-updated", TeamID: "team-1", Timestamp: 40, Channels: []string{"channel-a"}},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), state.ContextReadAt["channel-a"])
+	assert.Equal(t, int64(10), state.ContextReadAt["channel-b"])
+	assert.Equal(t, int64(20), state.SeenEvents["evt-multi"])
+	assert.Equal(t, int64(50), state.SeenEvents["evt-updated"])
+
+	api.On("KVGet", key).Return(mustMarshalReadState(t, state), (*model.AppError)(nil)).Once()
+	unread, _, err := store.GetUnreadEventsForContext("user-1", "team-1", "channel-b", []Event{{ID: "evt-multi", TeamID: "team-1", Timestamp: 20, Channels: []string{"channel-a", "channel-b"}}}, 20)
+	require.NoError(t, err)
+	assert.Empty(t, unread)
+
+	api.On("KVGet", key).Return(mustMarshalReadState(t, state), (*model.AppError)(nil)).Once()
+	unread, _, err = store.GetUnreadEventsForContext("user-1", "team-1", "channel-b", []Event{{ID: "evt-multi", TeamID: "team-1", Timestamp: 25, Channels: []string{"channel-a", "channel-b"}}}, 25)
+	require.NoError(t, err)
+	require.Len(t, unread, 1)
+	assert.Equal(t, int64(25), unread[0].Timestamp)
+	api.AssertExpectations(t)
+}
+
+func TestMarkEventsReadPrunesSeenEventsDeterministically(t *testing.T) {
+	api := &plugintest.API{}
+	store := NewEventStore(api, 1)
+	key := readStateKey("user-1", "team-1")
+	storedState, _ := json.Marshal(TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 1},
+		SeenEvents: map[string]int64{
+			"evt-a": 5,
+			"evt-b": 5,
+			"evt-c": 4,
+		},
+	})
+	api.On("KVGet", key).Return(storedState, (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", key, storedState, mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		return assert.Len(t, state.SeenEvents, 2) && state.SeenEvents["evt-new"] == 6 && state.SeenEvents["evt-a"] == 5
+	})).Return(true, (*model.AppError)(nil)).Once()
+
+	state, err := store.MarkEventsRead("user-1", "team-1", "", []Event{{ID: "evt-new", TeamID: "team-1", Timestamp: 6}})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int64{"evt-new": 6, "evt-a": 5}, state.SeenEvents)
+	api.AssertExpectations(t)
+}
+
+func TestReadStateMutationRetriesCompareAndSetConflict(t *testing.T) {
+	api := &plugintest.API{}
+	store := NewEventStore(api, 100)
+	key := readStateKey("user-1", "team-1")
+	firstState, _ := json.Marshal(TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 1},
+		SeenEvents:    map[string]int64{},
+	})
+	reloadedState, _ := json.Marshal(TimelineReadState{
+		Version:       readStateCurrentVersion,
+		ContextReadAt: map[string]int64{"_global": 2},
+		SeenEvents:    map[string]int64{},
+	})
+
+	api.On("KVGet", key).Return(firstState, (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", key, firstState, mock.AnythingOfType("[]uint8")).Return(false, (*model.AppError)(nil)).Once()
+	api.On("KVGet", key).Return(reloadedState, (*model.AppError)(nil)).Once()
+	api.On("KVCompareAndSet", key, reloadedState, mock.MatchedBy(func(data []byte) bool {
+		var state TimelineReadState
+		require.NoError(t, json.Unmarshal(data, &state))
+		return state.ContextReadAt["_global"] == 2 && state.SeenEvents["evt-1"] == 10
+	})).Return(true, (*model.AppError)(nil)).Once()
+
+	state, err := store.MarkEventsRead("user-1", "team-1", "", []Event{{ID: "evt-1", TeamID: "team-1", Timestamp: 10}})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), state.ContextReadAt["_global"])
+	api.AssertNumberOfCalls(t, "KVGet", 2)
+	api.AssertNumberOfCalls(t, "KVCompareAndSet", 2)
+	api.AssertExpectations(t)
+}
+
+func mustMarshalReadState(t *testing.T, state TimelineReadState) []byte {
+	t.Helper()
+	data, err := json.Marshal(state)
+	require.NoError(t, err)
+	return data
+}
 func TestAddEventExternalIDMappingConflictDoesNotStoreEvent(t *testing.T) {
 	api := &plugintest.API{}
 	store := NewEventStore(api, 100)

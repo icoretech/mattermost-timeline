@@ -2,7 +2,12 @@ import type { GlobalState } from "@mattermost/types/store";
 import {
   getCurrentChannelId,
   getCurrentTeamId,
+  getCurrentTimelineUnreadCount,
+  getCurrentTimelineUnreadEventIds,
+  getCurrentUserId,
+  getHasCurrentTimelineUnread,
   getPluginState,
+  getTimelineContextKey,
 } from "./selectors";
 
 describe("selectors", () => {
@@ -67,6 +72,60 @@ describe("selectors", () => {
         },
       } as unknown as GlobalState;
       expect(getCurrentChannelId(state)).toBe("channel123");
+    });
+  });
+
+  describe("current timeline unread selectors", () => {
+    it("builds stable context keys", () => {
+      expect(getTimelineContextKey("team-1")).toBe("team-1:_global");
+      expect(getTimelineContextKey("team-1", "channel-1")).toBe(
+        "team-1:channel-1",
+      );
+    });
+
+    it("dedupes current context and team-wide unread ids", () => {
+      const state = {
+        entities: {
+          teams: { currentTeamId: "team-1" },
+          channels: { currentChannelId: "channel-1" },
+          users: { currentUserId: "user-1" },
+        },
+        "plugins-ch.icorete.mattermost-timeline": {
+          unreadEventIdsByContext: {
+            "team-1:channel-1": ["channel-event", "shared"],
+            "team-1:_global": ["global-event", "shared"],
+            "team-1:channel-2": ["other-channel"],
+          },
+        },
+      } as unknown as GlobalState;
+
+      expect(getCurrentTimelineUnreadEventIds(state)).toEqual([
+        "channel-event",
+        "shared",
+        "global-event",
+      ]);
+      expect(getCurrentTimelineUnreadCount(state)).toBe(3);
+      expect(getHasCurrentTimelineUnread(state)).toBe(true);
+      expect(getCurrentUserId(state)).toBe("user-1");
+    });
+
+    it("does not include global unread twice when current context is global", () => {
+      const state = {
+        entities: {
+          teams: { currentTeamId: "team-1" },
+          channels: { currentChannelId: "" },
+          users: { currentUserId: "" },
+        },
+        "plugins-ch.icorete.mattermost-timeline": {
+          currentUserId: "hydrated-user",
+          unreadEventIdsByContext: {
+            "team-1:_global": ["global-event"],
+          },
+        },
+      } as unknown as GlobalState;
+
+      expect(getCurrentTimelineUnreadEventIds(state)).toEqual(["global-event"]);
+      expect(getCurrentUserId(state)).toBe("hydrated-user");
     });
   });
 });

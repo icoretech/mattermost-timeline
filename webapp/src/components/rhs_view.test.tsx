@@ -5,7 +5,7 @@ import { Provider } from "react-redux";
 import type { Store } from "redux";
 import { vi } from "vitest";
 
-import { CLEAR_EVENTS, SET_ERROR } from "../actions";
+import { CLEAR_EVENTS, MARK_EVENTS_READ, SET_ERROR } from "../actions";
 import manifest from "../manifest";
 import type { EventEntry, EventFeedState } from "../types/timeline";
 import RHSView from "./rhs_view";
@@ -44,6 +44,7 @@ function makePluginState(
     total: 0,
     newEventIds: [],
     updatedEventIds: [],
+    unreadEventIdsByContext: {},
     timelineOrder: "oldest_first",
     enableReactions: true,
     currentUserId: "",
@@ -275,6 +276,154 @@ describe("RHSView", () => {
     });
     expect(consoleError).toHaveBeenCalledWith(
       "Event Feed: failed to update reaction",
+      expect.any(Error),
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("marks visible unread events read after loaded render", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      if (String(input).endsWith("/api/v1/events/read")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              version: 1,
+              context_read_at: { "channel-1": 1000 },
+              seen_events: { e1: 1000 },
+            }),
+        } as Response);
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ events: [], total: 0 }),
+      } as Response);
+    });
+    const state = makeState({
+      pluginState: makePluginState({
+        events: [makeEvent("e1")],
+        total: 1,
+        viewTeamId: "team-1",
+        viewChannelId: "channel-1",
+        unreadEventIdsByContext: { "team-1:channel-1": ["e1"] },
+      }),
+    });
+
+    const { actions, container, root } = await renderRHS(state);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/plugins/${manifest.id}/api/v1/events/read`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          team_id: "team-1",
+          channel_id: "channel-1",
+          event_ids: ["e1"],
+        }),
+      }),
+    );
+    expect(actions).toContainEqual({
+      type: MARK_EVENTS_READ,
+      teamId: "team-1",
+      eventIds: ["e1"],
+    });
+
+    await cleanup(root, container);
+  });
+
+  it("sends popout read clears to the parent after local mark succeeds", async () => {
+    window.WebappUtils = {
+      popouts: {
+        isPopoutWindow: vi.fn(() => true),
+        onMessageFromParent: vi.fn(),
+        sendToParent: vi.fn(),
+      },
+    };
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      if (String(input).endsWith("/api/v1/events/read")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              version: 1,
+              context_read_at: { "channel-1": 1000 },
+              seen_events: { e1: 1000 },
+            }),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ events: [], total: 0 }),
+      } as Response);
+    });
+
+    const { container, root } = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events: [makeEvent("e1")],
+          total: 1,
+          viewTeamId: "team-1",
+          viewChannelId: "channel-1",
+          unreadEventIdsByContext: { "team-1:channel-1": ["e1"] },
+        }),
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(window.WebappUtils.popouts?.sendToParent).toHaveBeenCalledWith(
+      "TIMELINE_MARK_CONTEXT_READ",
+      { teamId: "team-1", eventIds: ["e1"] },
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("logs mark-read failures and leaves unread state intact", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      if (String(input).endsWith("/api/v1/events/read")) {
+        return Promise.resolve({ ok: false } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ events: [], total: 0 }),
+      } as Response);
+    });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    const { actions, container, root } = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events: [makeEvent("e1")],
+          total: 1,
+          viewTeamId: "team-1",
+          viewChannelId: "channel-1",
+          unreadEventIdsByContext: { "team-1:channel-1": ["e1"] },
+        }),
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(actions).not.toContainEqual({
+      type: MARK_EVENTS_READ,
+      teamId: "team-1",
+      eventIds: ["e1"],
+    });
+    expect(consoleError).toHaveBeenCalledWith(
+      "Event Feed: failed to mark events read",
       expect.any(Error),
     );
 

@@ -11,12 +11,14 @@ import {
   type EventFeedThunk,
   fetchEvents,
   fetchReactionUsers,
+  markVisibleEventsRead,
   removeReaction,
   SET_ERROR,
 } from "../actions";
 import {
   getCurrentChannelId,
   getCurrentTeamId,
+  getCurrentTimelineUnreadEventIds,
   getPluginState,
 } from "../selectors";
 import type { EventEntry, TimelineUser } from "../types/timeline";
@@ -29,15 +31,19 @@ import "../styles/timeline.scss";
 type AppDispatch = Dispatch &
   ((thunk: EventFeedThunk<unknown>) => Promise<unknown> | unknown);
 
+const MARK_POPOUT_CONTEXT_READ = "TIMELINE_MARK_CONTEXT_READ";
+
 const RHSView: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const listRef = useRef<HTMLDivElement>(null);
   const initialScrolledContextRef = useRef({ teamId: "", channelId: "" });
   const loadedContextRef = useRef({ teamId: "", channelId: "" });
+  const readMarkedSignatureRef = useRef("");
 
   const store = useStore<GlobalState>();
   const currentTeamId = useSelector(getCurrentTeamId);
   const currentChannelId = useSelector(getCurrentChannelId);
+  const currentUnreadEventIds = useSelector(getCurrentTimelineUnreadEventIds);
   const pluginState = useSelector(getPluginState);
 
   const {
@@ -122,6 +128,56 @@ const RHSView: React.FC = () => {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [isLoading, events.length, isOldestFirst, viewTeamId, viewChannelId]);
+
+  useEffect(() => {
+    const visibleEventIds = events.map((event) => event.id);
+    const unreadIdSet = new Set(currentUnreadEventIds);
+    const eventIdsToMark = visibleEventIds.filter((id) => unreadIdSet.has(id));
+    const eventSignature = events
+      .map((event) => `${event.id}:${event.timestamp}`)
+      .join("|");
+    const markSignature = `${viewTeamId}:${viewChannelId}:${eventSignature}:${eventIdsToMark.join(",")}`;
+
+    if (
+      !viewTeamId ||
+      viewTeamId !== currentTeamId ||
+      viewChannelId !== (currentChannelId || "") ||
+      isLoading ||
+      error ||
+      eventIdsToMark.length === 0 ||
+      readMarkedSignatureRef.current === markSignature
+    ) {
+      return;
+    }
+
+    readMarkedSignatureRef.current = markSignature;
+    void Promise.resolve(
+      dispatch(
+        markVisibleEventsRead(viewTeamId, viewChannelId, eventIdsToMark),
+      ),
+    )
+      .then(() => {
+        if (window.WebappUtils?.popouts?.isPopoutWindow()) {
+          window.WebappUtils.popouts.sendToParent(MARK_POPOUT_CONTEXT_READ, {
+            teamId: viewTeamId,
+            eventIds: eventIdsToMark,
+          });
+        }
+      })
+      .catch((markReadError: unknown) => {
+        console.error("Event Feed: failed to mark events read", markReadError);
+      });
+  }, [
+    dispatch,
+    events,
+    currentUnreadEventIds,
+    viewTeamId,
+    viewChannelId,
+    currentTeamId,
+    currentChannelId,
+    isLoading,
+    error,
+  ]);
 
   const handleAnimationEnd = useCallback(
     (eventId: string) => {

@@ -3,9 +3,11 @@ import React from "react";
 import type { Reducer, Store } from "redux";
 import {
   hydratePopoutState,
+  markEventsRead,
   parseNewEventWebSocket,
   parseReactionWebSocket,
   parseUpdatedEventWebSocket,
+  receivedUnreadEvents,
   setCurrentUserId,
   setViewContext,
 } from "./actions";
@@ -15,48 +17,32 @@ import manifest from "./manifest";
 import reducer from "./reducer";
 import { getPluginState } from "./selectors";
 import {
-  isEventEntry,
+  isEventFeedState,
   isRecord,
   isStringArray,
-  isTimelineOrder,
 } from "./timeline_validation";
 import type { PluginRegistry } from "./types/mattermost-webapp";
 import type {
-  EventFeedState,
+  HydratableEventFeedState,
   NewEventWebSocketMessage,
   ReactionUpdatedWebSocketMessage,
 } from "./types/timeline";
 
 const REQUEST_POPOUT_STATE = "GET_TIMELINE_POPOUT_STATE";
 const SEND_POPOUT_STATE = "SEND_TIMELINE_POPOUT_STATE";
+const MARK_POPOUT_CONTEXT_READ = "TIMELINE_MARK_CONTEXT_READ";
 
 type EventFeedPopoutPayload = {
   teamId: string;
   channelId: string;
   currentUserId: string;
-  pluginState?: EventFeedState;
+  pluginState?: HydratableEventFeedState;
 };
 
-function isEventFeedState(value: unknown): value is EventFeedState {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return (
-    Array.isArray(value.events) &&
-    value.events.every(isEventEntry) &&
-    typeof value.isLoading === "boolean" &&
-    (value.error === null || typeof value.error === "string") &&
-    typeof value.total === "number" &&
-    isStringArray(value.newEventIds) &&
-    isStringArray(value.updatedEventIds) &&
-    isTimelineOrder(value.timelineOrder) &&
-    typeof value.enableReactions === "boolean" &&
-    typeof value.currentUserId === "string" &&
-    typeof value.viewTeamId === "string" &&
-    typeof value.viewChannelId === "string"
-  );
-}
+type MarkPopoutContextReadPayload = {
+  teamId: string;
+  eventIds: string[];
+};
 
 function isEventFeedPopoutPayload(
   value: unknown,
@@ -75,6 +61,16 @@ function isEventFeedPopoutPayload(
   );
 }
 
+function isMarkPopoutContextReadPayload(
+  value: unknown,
+): value is MarkPopoutContextReadPayload {
+  return (
+    isRecord(value) &&
+    typeof value.teamId === "string" &&
+    isStringArray(value.eventIds)
+  );
+}
+
 export default class Plugin {
   public initialize(registry: PluginRegistry, store: Store<GlobalState>) {
     registry.registerReducer(reducer as Reducer);
@@ -88,7 +84,16 @@ export default class Plugin {
       registry.registerRHSPluginPopoutListener(
         manifest.id,
         (_teamName, _channelName, listeners) => {
-          listeners.onMessageFromPopout((channel) => {
+          listeners.onMessageFromPopout((channel, payload) => {
+            if (channel === MARK_POPOUT_CONTEXT_READ) {
+              if (isMarkPopoutContextReadPayload(payload)) {
+                store.dispatch(
+                  markEventsRead(payload.teamId, payload.eventIds),
+                );
+              }
+              return;
+            }
+
             if (channel !== REQUEST_POPOUT_STATE) {
               return;
             }
@@ -154,6 +159,7 @@ export default class Plugin {
         const action = parseNewEventWebSocket(message.data.event);
         if (action) {
           store.dispatch(action);
+          store.dispatch(receivedUnreadEvents([action.event]));
         }
       },
     );
@@ -164,6 +170,7 @@ export default class Plugin {
         const action = parseUpdatedEventWebSocket(message.data.event);
         if (action) {
           store.dispatch(action);
+          store.dispatch(receivedUnreadEvents([action.event]));
         }
       },
     );

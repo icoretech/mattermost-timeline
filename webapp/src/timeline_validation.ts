@@ -2,6 +2,7 @@ import type {
   EventEntry,
   EventFeedState,
   ReactionClientSummary,
+  TimelineUnreadState,
 } from "./types/timeline";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -12,6 +13,16 @@ export function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((item) => typeof item === "string")
   );
+}
+
+export function isTimelineUnreadState(
+  value: unknown,
+): value is TimelineUnreadState {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(isStringArray);
 }
 
 export function isTimelineOrder(
@@ -76,5 +87,28 @@ export function isEventEntry(value: unknown): value is EventEntry {
     (value.client_reactions === undefined ||
       isReactionSummaryMap(value.client_reactions)) &&
     (value.channels === undefined || isStringArray(value.channels))
+  );
+}
+
+export function isEventFeedState(value: unknown): value is EventFeedState {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    Array.isArray(value.events) &&
+    value.events.every(isEventEntry) &&
+    typeof value.isLoading === "boolean" &&
+    (value.error === null || typeof value.error === "string") &&
+    typeof value.total === "number" &&
+    isStringArray(value.newEventIds) &&
+    isStringArray(value.updatedEventIds) &&
+    (value.unreadEventIdsByContext === undefined ||
+      isTimelineUnreadState(value.unreadEventIdsByContext)) &&
+    isTimelineOrder(value.timelineOrder) &&
+    typeof value.enableReactions === "boolean" &&
+    typeof value.currentUserId === "string" &&
+    typeof value.viewTeamId === "string" &&
+    typeof value.viewChannelId === "string"
   );
 }
