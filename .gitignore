@@ -40,4 +40,7 @@ AGENTS.md
 !.agents/skills/mattermost-timeline-dev-smoke/**
 .agents/skills/mattermost-timeline-dev-smoke/**/__pycache__/
 .agents/skills/mattermost-timeline-dev-smoke/**/*.py[cod]
+!.agents/skills/mattermost-timeline-readme-screenshot-generator/
+!.agents/skills/mattermost-timeline-readme-screenshot-generator/**
 .sisyphus/
+.omo/
