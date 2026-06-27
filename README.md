@@ -14,7 +14,7 @@ Send deploys, alerts, incidents, security events, billing updates, and any other
 Instead of scattering machine updates across noisy chat channels, Mattermost Timeline gives every team a live event feed with icons, Markdown, useful links, channel targeting, idempotent updates, and lightweight reactions.
 
 <p align="center">
-  <img src="assets/screenshot-light.png" alt="Mattermost Timeline in light mode" width="380" />
+  <img src="assets/timeline-demo.gif" alt="Mattermost Timeline animated demo" width="380" />
   &nbsp;&nbsp;
   <img src="assets/screenshot-dark.png" alt="Mattermost Timeline in dark mode" width="380" />
 </p>
