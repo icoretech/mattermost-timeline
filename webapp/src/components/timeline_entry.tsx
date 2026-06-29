@@ -20,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
+import type { TimestampDisplayPreferences } from "../selectors";
 import type { EventEntry, EventLink, TimelineUser } from "../types/timeline";
 import ReactionBar from "./reaction_bar";
 
@@ -30,6 +31,7 @@ interface Props {
   onAnimationEnd: (eventId: string) => void;
   onUpdateAnimationEnd: (eventId: string) => void;
   enableReactions: boolean;
+  timestampDisplayPreferences: TimestampDisplayPreferences;
   onAddReaction: (eventId: string, icon: string) => void;
   onRemoveReaction: (eventId: string, icon: string) => void;
   onFetchReactionUsers: (eventId: string, icon: string) => Promise<string[]>;
@@ -59,26 +61,66 @@ const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   generic: { icon: MapPin, color: "#868e96" },
 };
 
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
+function getHourCycle(useMilitaryTime: boolean): "h23" | "h12" {
+  return useMilitaryTime ? "h23" : "h12";
+}
 
-  const time = date.toLocaleTimeString(undefined, {
+function getDateKeyForTimeZone(
+  date: Date,
+  preferences: TimestampDisplayPreferences,
+): string {
+  return new Intl.DateTimeFormat(preferences.locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: preferences.timeZone,
+  }).format(date);
+}
+
+export function formatTimestamp(
+  timestamp: number,
+  preferences: TimestampDisplayPreferences,
+  now = new Date(),
+): string {
+  const date = new Date(timestamp);
+  const timeOptions: Intl.DateTimeFormatOptions = {
     hour: "2-digit",
     minute: "2-digit",
-  });
+    hourCycle: getHourCycle(preferences.useMilitaryTime),
+    timeZone: preferences.timeZone,
+  };
+  const time = date.toLocaleTimeString(preferences.locale, timeOptions);
 
-  if (isToday) {
+  if (
+    getDateKeyForTimeZone(date, preferences) ===
+    getDateKeyForTimeZone(now, preferences)
+  ) {
     return time;
   }
 
-  const dateStr = date.toLocaleDateString(undefined, {
+  const dateStr = date.toLocaleDateString(preferences.locale, {
     month: "short",
     day: "numeric",
+    timeZone: preferences.timeZone,
   });
 
   return `${dateStr} ${time}`;
+}
+
+function formatTimestampTooltip(
+  timestamp: number,
+  preferences: TimestampDisplayPreferences,
+): string {
+  return new Date(timestamp).toLocaleString(preferences.locale, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: getHourCycle(preferences.useMilitaryTime),
+    timeZone: preferences.timeZone,
+  });
 }
 
 function isSafeUrl(url: string): boolean {
@@ -175,6 +217,7 @@ const TimelineEntry: React.FC<Props> = ({
   onAnimationEnd,
   onUpdateAnimationEnd,
   enableReactions,
+  timestampDisplayPreferences,
   onAddReaction,
   onRemoveReaction,
   onFetchReactionUsers,
@@ -239,9 +282,12 @@ const TimelineEntry: React.FC<Props> = ({
           </span>
           <span
             className="timeline-entry__time"
-            title={new Date(event.timestamp).toLocaleString()}
+            title={formatTimestampTooltip(
+              event.timestamp,
+              timestampDisplayPreferences,
+            )}
           >
-            {formatTime(event.timestamp)}
+            {formatTimestamp(event.timestamp, timestampDisplayPreferences)}
           </span>
         </div>
         <div className="timeline-entry__title">{event.title}</div>

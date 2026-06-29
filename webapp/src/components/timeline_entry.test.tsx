@@ -1,7 +1,90 @@
 import React, { type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { EventEntry } from "../types/timeline";
-import TimelineEntry, { renderMarkdown } from "./timeline_entry";
+import TimelineEntry, {
+  formatTimestamp,
+  renderMarkdown,
+} from "./timeline_entry";
+
+const defaultTimestampDisplayPreferences = {
+  locale: "en",
+  timeZone: "UTC",
+  useMilitaryTime: false,
+};
+
+function queryStaticTimelineEntry(
+  event: EventEntry,
+  timestampDisplayPreferences = defaultTimestampDisplayPreferences,
+): HTMLElement {
+  const html = renderToStaticMarkup(
+    React.createElement(TimelineEntry, {
+      event,
+      isNew: false,
+      isUpdated: false,
+      onAnimationEnd: () => undefined,
+      onUpdateAnimationEnd: () => undefined,
+      enableReactions: false,
+      timestampDisplayPreferences,
+      onAddReaction: () => undefined,
+      onRemoveReaction: () => undefined,
+      onFetchReactionUsers: async () => [],
+      getUser: () => undefined,
+    }),
+  );
+  const container = document.createElement("div");
+  container.innerHTML = html;
+
+  return container;
+}
+
+describe("formatTimestamp", () => {
+  it("formats same-day timestamps with a 12-hour clock", () => {
+    expect(
+      formatTimestamp(
+        Date.UTC(2026, 5, 25, 5, 0),
+        defaultTimestampDisplayPreferences,
+        new Date(Date.UTC(2026, 5, 25, 12, 0)),
+      ),
+    ).toBe("05:00 AM");
+  });
+
+  it("formats same-day timestamps with a 24-hour clock", () => {
+    const result = formatTimestamp(
+      Date.UTC(2026, 5, 25, 5, 0),
+      { ...defaultTimestampDisplayPreferences, useMilitaryTime: true },
+      new Date(Date.UTC(2026, 5, 25, 12, 0)),
+    );
+
+    expect(result).toContain("05:00");
+    expect(result).not.toMatch(/AM|PM/);
+  });
+
+  it("includes the date for non-today timestamps", () => {
+    expect(
+      formatTimestamp(
+        Date.UTC(2026, 5, 25, 5, 0),
+        defaultTimestampDisplayPreferences,
+        new Date(Date.UTC(2026, 5, 26, 12, 0)),
+      ),
+    ).toBe("Jun 25 05:00 AM");
+  });
+
+  it("compares today boundaries in the selected timezone", () => {
+    const timestamp = Date.UTC(2026, 5, 25, 23, 30);
+    const now = new Date(Date.UTC(2026, 5, 26, 0, 30));
+
+    expect(
+      formatTimestamp(timestamp, defaultTimestampDisplayPreferences, now),
+    ).toContain("Jun 25");
+    expect(
+      formatTimestamp(
+        timestamp,
+        { ...defaultTimestampDisplayPreferences, timeZone: "Europe/Rome" },
+        now,
+      ),
+    ).toBe("01:30 AM");
+  });
+});
 
 describe("renderMarkdown", () => {
   it("returns plain text unchanged", () => {
@@ -97,10 +180,33 @@ describe("renderMarkdown", () => {
         onRemoveReaction: () => undefined,
         onFetchReactionUsers: async () => [],
         getUser: () => undefined,
+        timestampDisplayPreferences: defaultTimestampDisplayPreferences,
       }),
     );
 
     expect(html).toContain("danger");
     expect(html).not.toContain('href="data:text/html,alert(1)"');
+  });
+});
+
+describe("TimelineEntry", () => {
+  it("uses timestamp display preferences for visible time and tooltip", () => {
+    const event: EventEntry = {
+      id: "event-1",
+      team_id: "team-1",
+      timestamp: Date.UTC(2026, 5, 25, 5, 0),
+      title: "event title",
+      event_type: "info",
+    };
+    const container = queryStaticTimelineEntry(event, {
+      locale: "en",
+      timeZone: "UTC",
+      useMilitaryTime: true,
+    });
+    const time = container.querySelector(".timeline-entry__time");
+
+    expect(time?.textContent).toContain("05:00");
+    expect(time?.textContent).not.toMatch(/AM|PM/);
+    expect(time?.getAttribute("title")).not.toMatch(/AM|PM/);
   });
 });

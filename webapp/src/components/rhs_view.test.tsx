@@ -13,7 +13,11 @@ import RHSView from "./rhs_view";
 type TestState = {
   entities: {
     users: {
+      currentUserId: string;
       profiles: Record<string, unknown>;
+    };
+    preferences: {
+      myPreferences: Record<string, unknown>;
     };
     teams: {
       currentTeamId: string;
@@ -58,15 +62,31 @@ function makeState({
   teamId = "team-1",
   channelId = "channel-1",
   pluginState = makePluginState(),
+  preferences = {},
 }: {
   teamId?: string;
   channelId?: string;
   pluginState?: EventFeedState;
+  preferences?: Record<string, unknown>;
 } = {}): TestState {
   return {
     entities: {
       users: {
-        profiles: {},
+        currentUserId: "user-1",
+        profiles: {
+          "user-1": {
+            id: "user-1",
+            locale: "en",
+            timezone: {
+              useAutomaticTimezone: "true",
+              automaticTimezone: "UTC",
+              manualTimezone: "",
+            },
+          },
+        },
+      },
+      preferences: {
+        myPreferences: preferences,
       },
       teams: {
         currentTeamId: teamId,
@@ -152,6 +172,35 @@ describe("RHSView", () => {
     expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toContain(
       "channel_id=channel-1",
     );
+
+    await cleanup(root, container);
+  });
+
+  it("threads timestamp display preferences into timeline entries", async () => {
+    const state = makeState({
+      pluginState: makePluginState({
+        events: [
+          {
+            ...makeEvent("e1"),
+            timestamp: Date.UTC(2026, 5, 25, 5, 0),
+          },
+        ],
+        total: 1,
+      }),
+      preferences: {
+        "display_settings--use_military_time": {
+          category: "display_settings",
+          name: "use_military_time",
+          user_id: "user-1",
+          value: "true",
+        },
+      },
+    });
+    const { container, root } = await renderRHS(state);
+    const time = container.querySelector(".timeline-entry__time");
+
+    expect(time?.textContent).toContain("05:00");
+    expect(time?.textContent).not.toMatch(/AM|PM/);
 
     await cleanup(root, container);
   });

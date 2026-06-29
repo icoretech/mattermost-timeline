@@ -1,9 +1,19 @@
 import type { GlobalState } from "@mattermost/types/store";
+import type { UserProfile } from "@mattermost/types/users";
+import { Preferences } from "mattermost-redux/constants";
+import { getCurrentUserLocale } from "mattermost-redux/selectors/entities/i18n";
+import { getBool } from "mattermost-redux/selectors/entities/preferences";
+import { getUserCurrentTimezone } from "mattermost-redux/utils/timezone_utils";
 
 import manifest from "./manifest";
 import type { EventFeedState } from "./types/timeline";
 
 const GLOBAL_TIMELINE_CONTEXT = "_global";
+export type TimestampDisplayPreferences = {
+  locale: string;
+  timeZone: string;
+  useMilitaryTime: boolean;
+};
 
 function dedupeIds(ids: string[]): string[] {
   return Array.from(new Set(ids));
@@ -43,6 +53,40 @@ export function getCurrentUserId(state: GlobalState): string {
     getPluginState(state)?.currentUserId ||
     ""
   );
+}
+function getCurrentUserProfile(state: GlobalState): UserProfile | undefined {
+  return state.entities.users.profiles?.[getCurrentUserId(state)];
+}
+
+function hasMyPreferences(state: GlobalState): boolean {
+  return Boolean(
+    (
+      state as GlobalState & {
+        entities: GlobalState["entities"] & {
+          preferences?: GlobalState["entities"]["preferences"];
+        };
+      }
+    ).entities.preferences?.myPreferences,
+  );
+}
+
+export function getTimestampDisplayPreferences(
+  state: GlobalState,
+): TimestampDisplayPreferences {
+  const currentUser = getCurrentUserProfile(state);
+
+  return {
+    locale: currentUser?.locale || getCurrentUserLocale(state),
+    timeZone: getUserCurrentTimezone(currentUser?.timezone),
+    useMilitaryTime: hasMyPreferences(state)
+      ? getBool(
+          state,
+          Preferences.CATEGORY_DISPLAY_SETTINGS,
+          Preferences.USE_MILITARY_TIME,
+          false,
+        )
+      : false,
+  };
 }
 
 export function getCurrentTimelineUnreadEventIds(state: GlobalState): string[] {

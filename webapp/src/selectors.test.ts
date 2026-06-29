@@ -8,6 +8,7 @@ import {
   getHasCurrentTimelineUnread,
   getPluginState,
   getTimelineContextKey,
+  getTimestampDisplayPreferences,
 } from "./selectors";
 
 describe("selectors", () => {
@@ -126,6 +127,128 @@ describe("selectors", () => {
 
       expect(getCurrentTimelineUnreadEventIds(state)).toEqual(["global-event"]);
       expect(getCurrentUserId(state)).toBe("hydrated-user");
+    });
+  });
+  describe("timestamp display preferences", () => {
+    function buildState(
+      overrides: {
+        locale?: string;
+        preferences?: Record<string, unknown>;
+        timezone?: unknown;
+      } = {},
+    ): GlobalState {
+      const profile = {
+        id: "user-1",
+        locale: overrides.locale || "en",
+        timezone: overrides.timezone,
+      };
+      const state = {
+        entities: {
+          channels: { currentChannelId: "" },
+          preferences:
+            overrides.preferences === undefined
+              ? undefined
+              : {
+                  myPreferences: overrides.preferences,
+                },
+          teams: { currentTeamId: "" },
+          users: {
+            currentUserId: "user-1",
+            profiles:
+              overrides.timezone === undefined && overrides.locale === undefined
+                ? {}
+                : { "user-1": profile },
+          },
+        },
+      };
+
+      return state as unknown as GlobalState;
+    }
+
+    it("returns true for military time preference value true", () => {
+      expect(
+        getTimestampDisplayPreferences(
+          buildState({
+            preferences: {
+              "display_settings--use_military_time": {
+                category: "display_settings",
+                name: "use_military_time",
+                user_id: "user-1",
+                value: "true",
+              },
+            },
+          }),
+        ).useMilitaryTime,
+      ).toBe(true);
+    });
+
+    it("returns false for military time preference value false", () => {
+      expect(
+        getTimestampDisplayPreferences(
+          buildState({
+            preferences: {
+              "display_settings--use_military_time": {
+                category: "display_settings",
+                name: "use_military_time",
+                user_id: "user-1",
+                value: "false",
+              },
+            },
+          }),
+        ).useMilitaryTime,
+      ).toBe(false);
+    });
+
+    it("defaults missing preferences to non-military time", () => {
+      expect(getTimestampDisplayPreferences(buildState()).useMilitaryTime).toBe(
+        false,
+      );
+      expect(
+        getTimestampDisplayPreferences(buildState({ preferences: {} }))
+          .useMilitaryTime,
+      ).toBe(false);
+    });
+
+    it("uses the current user locale", () => {
+      expect(
+        getTimestampDisplayPreferences(
+          buildState({ locale: "it", preferences: {} }),
+        ).locale,
+      ).toBe("it");
+    });
+
+    it("uses the current user's automatic timezone", () => {
+      expect(
+        getTimestampDisplayPreferences(
+          buildState({
+            preferences: {},
+            timezone: {
+              useAutomaticTimezone: "true",
+              automaticTimezone: "America/New_York",
+              manualTimezone: "Europe/Rome",
+            },
+          }),
+        ).timeZone,
+      ).toBe("America/New_York");
+    });
+
+    it("uses the current user's manual timezone", () => {
+      expect(
+        getTimestampDisplayPreferences(
+          buildState({
+            preferences: {},
+            timezone: {
+              useAutomaticTimezone: "false",
+              automaticTimezone: "America/New_York",
+              manualTimezone: "Europe/Rome",
+            },
+          }),
+        ).timeZone,
+      ).toBe("Europe/Rome");
+    });
+
+    it("defaults missing profile timezone to UTC", () => {
+      expect(getTimestampDisplayPreferences(buildState()).timeZone).toBe("UTC");
     });
   });
 });

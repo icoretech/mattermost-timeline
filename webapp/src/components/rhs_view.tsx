@@ -20,6 +20,7 @@ import {
   getCurrentTeamId,
   getCurrentTimelineUnreadEventIds,
   getPluginState,
+  getTimestampDisplayPreferences,
 } from "../selectors";
 import type { EventEntry, TimelineUser } from "../types/timeline";
 
@@ -45,6 +46,9 @@ const RHSView: React.FC = () => {
   const currentChannelId = useSelector(getCurrentChannelId);
   const currentUnreadEventIds = useSelector(getCurrentTimelineUnreadEventIds);
   const pluginState = useSelector(getPluginState);
+  const timestampDisplayPreferences = useSelector(
+    getTimestampDisplayPreferences,
+  );
 
   const {
     events = [],
@@ -281,6 +285,7 @@ const RHSView: React.FC = () => {
             onAnimationEnd={handleAnimationEnd}
             onUpdateAnimationEnd={handleUpdateAnimationEnd}
             enableReactions={enableReactions}
+            timestampDisplayPreferences={timestampDisplayPreferences}
             onAddReaction={handleAddReaction}
             onRemoveReaction={handleRemoveReaction}
             onFetchReactionUsers={handleFetchReactionUsers}
