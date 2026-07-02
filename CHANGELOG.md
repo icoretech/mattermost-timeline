@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/icoretech/mattermost-timeline/compare/v1.5.1...v1.5.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide-react to v1.23.0 ([#117](https://github.com/icoretech/mattermost-timeline/issues/117)) ([1413ee6](https://github.com/icoretech/mattermost-timeline/commit/1413ee646db1bb08339a8c64e539b438530b88d1))
+
 ## [1.5.1](https://github.com/icoretech/mattermost-timeline/compare/v1.5.0...v1.5.1) (2026-06-29)
 
 
