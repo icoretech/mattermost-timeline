@@ -27,7 +27,7 @@ jobs:
     if: ${{ needs.release-please.outputs.release_created }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - uses: actions/setup-node@v6
