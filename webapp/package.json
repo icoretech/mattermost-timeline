@@ -28,7 +28,7 @@
     "react-redux": "9.3.0",
     "redux": "5.0.1",
     "sass-embedded": "1.100.0",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vite": "8.1.5",
     "vite-plugin-css-injected-by-js": "5.0.2",
     "vitest": "4.1.10"
