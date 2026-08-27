@@ -26,7 +26,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.20.0
           cache: npm
           cache-dependency-path: webapp/package-lock.json
       - run: make apply
@@ -46,7 +46,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.20.0
           cache: npm
           cache-dependency-path: webapp/package-lock.json
       - run: cd webapp && npm ci
