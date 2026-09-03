@@ -15,7 +15,7 @@
     "mattermost-redux": "11.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.2",
+    "@biomejs/biome": "2.5.12",
     "@mattermost/client": "11.9.0",
     "@mattermost/types": "11.9.0",
     "@types/node": "26.4.1",
