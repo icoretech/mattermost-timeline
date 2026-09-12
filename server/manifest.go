@@ -11,7 +11,7 @@ import (
 
 var manifest *model.Manifest
 
-const manifestVersion = "1.5.1" // x-release-please-version
+const manifestVersion = "1.5.2" // x-release-please-version
 
 var manifestStr = strings.Replace(`
 {
