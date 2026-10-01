@@ -63,6 +63,7 @@ export default function ReactionBar({
         type="button"
         className={`reaction-bar__toggle ${pickerOpen ? "reaction-bar__toggle--active" : ""}`}
         onClick={() => setPickerOpen(!pickerOpen)}
+        aria-label={pickerOpen ? "Close reaction picker" : "Add reaction"}
         title={pickerOpen ? "Close" : "Add reaction"}
       >
         {pickerOpen ? <X size={14} /> : <SmilePlus size={14} />}
@@ -75,6 +76,7 @@ export default function ReactionBar({
             type="button"
             key={icon}
             className="reaction-bar__tray-btn"
+            aria-label={label}
             title={label}
             onClick={() => handlePickerSelect(icon)}
             tabIndex={pickerOpen ? 0 : -1}

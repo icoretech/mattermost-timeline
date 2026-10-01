@@ -971,3 +971,23 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .timeline-entry,
+  .timeline-entry--new,
+  .timeline-entry--updated,
+  .event-feed-filter-toggle,
+  .event-feed-filter-chip,
+  .timeline-entry__link,
+  .timeline-entry__link-icon,
+  .reaction-bar__toggle,
+  .reaction-bar__tray,
+  .reaction-bar__tray-btn,
+  .reaction-pill {
+    animation: none;
+    transition: none;
+  }
+
+  .event-feed-loading__spinner {
+    animation: none;
+  }
+}
