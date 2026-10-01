@@ -1,5 +1,59 @@
 # Changelog
 
+## [2.0.0](https://github.com/icoretech/mattermost-timeline/compare/v1.5.1...v2.0.0) (2026-10-01)
+
+
+### Features
+
+* **admin:** manage webhook tokens and send timeline test events ([9f8d710](https://github.com/icoretech/mattermost-timeline/commit/9f8d710c9230e1c0593ef229944b30e0735a2d4e))
+* **events:** add severity, status, environment, pinning and expiry metadata ([02ac276](https://github.com/icoretech/mattermost-timeline/commit/02ac276b0e8640b7ecedbb5f1108cb3efb497057))
+* **timeline:** group active and pinned events separately from history ([1c5fb37](https://github.com/icoretech/mattermost-timeline/commit/1c5fb37b465a48c52d73478163ceb38ca93e8144))
+* **timeline:** search events and combine metadata, activity and unread filters ([0f59f02](https://github.com/icoretech/mattermost-timeline/commit/0f59f02e209c6bd35f34487316d135194c453a05))
+* **webhooks:** accept batches of up to 50 events with per-item results ([c151137](https://github.com/icoretech/mattermost-timeline/commit/c151137525fe5095f0f24b9c4da8ac3b2dc3ee03))
+* **webhooks:** add named tokens with team and channel restrictions ([c0b39a0](https://github.com/icoretech/mattermost-timeline/commit/c0b39a090fc49bbe08f6f844cc4f0717ef7998bf))
+* **webhooks:** authenticate HMAC signatures and reject replayed requests ([a4d1cf1](https://github.com/icoretech/mattermost-timeline/commit/a4d1cf1427c42bbfd010b16183a44446df20bcea))
+* **webhooks:** publish event and batch JSON schemas with payload contract tests ([94aa3af](https://github.com/icoretech/mattermost-timeline/commit/94aa3afc2aec3cb9af31ace00b5744a9829d54a3))
+
+
+### Bug Fixes
+
+* **a11y:** respect reduced motion and label reaction controls ([8a6ad57](https://github.com/icoretech/mattermost-timeline/commit/8a6ad57acb4f0d101c580fb8d3e35ce1ae838e31))
+* **admin:** explain webhook setup and align test event controls ([948e079](https://github.com/icoretech/mattermost-timeline/commit/948e079f13b13b56333d47bea659b24f5facc6bf))
+* **deps:** update dependency lucide-react to v1.23.0 ([#117](https://github.com/icoretech/mattermost-timeline/issues/117)) ([1413ee6](https://github.com/icoretech/mattermost-timeline/commit/1413ee646db1bb08339a8c64e539b438530b88d1))
+* **deps:** update dependency lucide-react to v1.24.0 ([#125](https://github.com/icoretech/mattermost-timeline/issues/125)) ([02ed7c6](https://github.com/icoretech/mattermost-timeline/commit/02ed7c6248aef4912233552f5f06163fb8b65062))
+* **deps:** update dependency lucide-react to v1.25.0 ([#129](https://github.com/icoretech/mattermost-timeline/issues/129)) ([3d7ac0b](https://github.com/icoretech/mattermost-timeline/commit/3d7ac0b1d997e0e8f07164ae9a5970f1adb26c04))
+* **deps:** update dependency lucide-react to v1.26.0 ([#133](https://github.com/icoretech/mattermost-timeline/issues/133)) ([673c367](https://github.com/icoretech/mattermost-timeline/commit/673c36782e4533ee5304294f69ea9c350233be6f))
+* **deps:** update dependency lucide-react to v1.27.0 ([#134](https://github.com/icoretech/mattermost-timeline/issues/134)) ([79d26de](https://github.com/icoretech/mattermost-timeline/commit/79d26dee0a88b331b5432e782a8ff4365a1d0f32))
+* **deps:** update dependency lucide-react to v1.28.0 ([#138](https://github.com/icoretech/mattermost-timeline/issues/138)) ([55a560e](https://github.com/icoretech/mattermost-timeline/commit/55a560e8e35d9231d4cac27fe2e25c1e820bb85c))
+* **deps:** update dependency lucide-react to v1.30.0 ([#144](https://github.com/icoretech/mattermost-timeline/issues/144)) ([8a913c7](https://github.com/icoretech/mattermost-timeline/commit/8a913c72521974aa63210c6ecf065df3095b615a))
+* **deps:** update dependency lucide-react to v1.31.0 ([#146](https://github.com/icoretech/mattermost-timeline/issues/146)) ([893dafe](https://github.com/icoretech/mattermost-timeline/commit/893dafeb00161b95237cbd9afa1b0c46f924fb1f))
+* **deps:** update dependency lucide-react to v1.32.0 ([#151](https://github.com/icoretech/mattermost-timeline/issues/151)) ([87fbfa9](https://github.com/icoretech/mattermost-timeline/commit/87fbfa98aadb58634df8f87b625227910a960366))
+* **deps:** update dependency lucide-react to v1.33.0 ([#154](https://github.com/icoretech/mattermost-timeline/issues/154)) ([5158f3e](https://github.com/icoretech/mattermost-timeline/commit/5158f3ef9ced34bf72844e1f50d26700ed56d50f))
+* **deps:** update dependency lucide-react to v1.34.0 ([#160](https://github.com/icoretech/mattermost-timeline/issues/160)) ([0a41bf3](https://github.com/icoretech/mattermost-timeline/commit/0a41bf3844c3affd7b9e521ce0abad949eb306ee))
+* **deps:** update dependency lucide-react to v1.35.0 ([#164](https://github.com/icoretech/mattermost-timeline/issues/164)) ([57ad3df](https://github.com/icoretech/mattermost-timeline/commit/57ad3dfc429ea93314f6d4365ab6518ca0d90d67))
+* **deps:** update dependency lucide-react to v1.37.0 ([#165](https://github.com/icoretech/mattermost-timeline/issues/165)) ([17254c9](https://github.com/icoretech/mattermost-timeline/commit/17254c9da86314da890222de4f7111194cad64fc))
+* **deps:** update dependency lucide-react to v1.38.0 ([#166](https://github.com/icoretech/mattermost-timeline/issues/166)) ([346af3c](https://github.com/icoretech/mattermost-timeline/commit/346af3cf608226cd9867e3e76d3b3c505bedd9a5))
+* **deps:** update dependency lucide-react to v1.39.0 ([#167](https://github.com/icoretech/mattermost-timeline/issues/167)) ([c425ec3](https://github.com/icoretech/mattermost-timeline/commit/c425ec342ab25e1e5a1edfda3d419f3441178d9b))
+* **deps:** update dependency lucide-react to v1.40.0 ([#171](https://github.com/icoretech/mattermost-timeline/issues/171)) ([783b46e](https://github.com/icoretech/mattermost-timeline/commit/783b46ef2ba112320efb642279c379f574b4eac8))
+* **deps:** update dependency lucide-react to v1.41.0 ([#174](https://github.com/icoretech/mattermost-timeline/issues/174)) ([3c6b789](https://github.com/icoretech/mattermost-timeline/commit/3c6b7894279e2ff8e48bbd2be4564490b767d35b))
+* **deps:** update dependency lucide-react to v1.42.0 ([#175](https://github.com/icoretech/mattermost-timeline/issues/175)) ([7e6b451](https://github.com/icoretech/mattermost-timeline/commit/7e6b4514a6bc5e03f1f96fed10f2c112abe61011))
+* **deps:** update dependency lucide-react to v1.43.0 ([#177](https://github.com/icoretech/mattermost-timeline/issues/177)) ([86cf93e](https://github.com/icoretech/mattermost-timeline/commit/86cf93e83e9a6f26f719b4115aa57435f15fcdf0))
+* **deps:** update dependency lucide-react to v1.44.0 ([#182](https://github.com/icoretech/mattermost-timeline/issues/182)) ([ae2e3d0](https://github.com/icoretech/mattermost-timeline/commit/ae2e3d0b4b9164f1275b777022e2ef310b22644a))
+* **deps:** update dependency lucide-react to v1.45.0 ([#183](https://github.com/icoretech/mattermost-timeline/issues/183)) ([7995b4d](https://github.com/icoretech/mattermost-timeline/commit/7995b4d21169f05956bf56b61a24cbdeb3d4e92d))
+* **deps:** update dependency lucide-react to v1.46.0 ([#185](https://github.com/icoretech/mattermost-timeline/issues/185)) ([5d8021e](https://github.com/icoretech/mattermost-timeline/commit/5d8021ec387705a2a58e0cc46c4885410b001e28))
+* **deps:** update dependency lucide-react to v1.47.0 ([#187](https://github.com/icoretech/mattermost-timeline/issues/187)) ([a3dd61c](https://github.com/icoretech/mattermost-timeline/commit/a3dd61cc8ffc313e848d48b76dc4a3aea77d6113))
+* **deps:** update dependency lucide-react to v1.48.0 ([#191](https://github.com/icoretech/mattermost-timeline/issues/191)) ([3f9b4df](https://github.com/icoretech/mattermost-timeline/commit/3f9b4dfdd7c26767c8ca8fe90d17b983b807b29e))
+* **deps:** update mattermost-sdk to v11.9.0 ([#140](https://github.com/icoretech/mattermost-timeline/issues/140)) ([953043d](https://github.com/icoretech/mattermost-timeline/commit/953043dfab8a35b5ab4db50c118a4859e3c16ac7))
+* **deps:** update module github.com/mattermost/mattermost/server/public to v0.4.4 ([#157](https://github.com/icoretech/mattermost-timeline/issues/157)) ([b85fe47](https://github.com/icoretech/mattermost-timeline/commit/b85fe476a211d6b8fe5b88331fe102a548ae9e06))
+* **deps:** update module github.com/stretchr/testify to v1.12.0 ([#149](https://github.com/icoretech/mattermost-timeline/issues/149)) ([37516ae](https://github.com/icoretech/mattermost-timeline/commit/37516ae0c20b69d2c6aaa235801cef3664f1aaea))
+* **deps:** update module github.com/stretchr/testify to v1.12.1 ([#152](https://github.com/icoretech/mattermost-timeline/issues/152)) ([6a9ba60](https://github.com/icoretech/mattermost-timeline/commit/6a9ba60a9cbec4ec13e814e2ac0db9ffe1a1d5b8))
+* **links:** reject control characters before rendering event URLs ([19f270c](https://github.com/icoretech/mattermost-timeline/commit/19f270cc3dbc986c2035f451bec188df25b8374c))
+
+
+### Documentation
+
+* record timeline 2.0 runtime verification ([6ceb80f](https://github.com/icoretech/mattermost-timeline/commit/6ceb80f89654aa75ae6af2a6df384faded86ff60))
+
 ## [1.5.1](https://github.com/icoretech/mattermost-timeline/compare/v1.5.0...v1.5.1) (2026-06-29)
 
 
