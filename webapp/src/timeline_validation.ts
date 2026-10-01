@@ -1,8 +1,10 @@
-import type {
-  EventEntry,
-  EventFeedState,
-  ReactionClientSummary,
-  TimelineUnreadState,
+import {
+  type EventEntry,
+  type EventFeedState,
+  type ReactionClientSummary,
+  TIMELINE_SEVERITIES,
+  TIMELINE_STATUSES,
+  type TimelineUnreadState,
 } from "./types/timeline";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,6 +31,24 @@ export function isTimelineOrder(
   value: unknown,
 ): value is EventFeedState["timelineOrder"] {
   return value === "oldest_first" || value === "newest_first";
+}
+
+function isTimelineSeverity(value: unknown): value is EventEntry["severity"] {
+  return (
+    typeof value === "string" &&
+    TIMELINE_SEVERITIES.includes(value as (typeof TIMELINE_SEVERITIES)[number])
+  );
+}
+
+function isTimelineStatus(value: unknown): value is EventEntry["status"] {
+  return (
+    typeof value === "string" &&
+    TIMELINE_STATUSES.includes(value as (typeof TIMELINE_STATUSES)[number])
+  );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isEventLink(value: unknown) {
@@ -84,6 +104,13 @@ export function isEventEntry(value: unknown): value is EventEntry {
     (value.source === undefined || typeof value.source === "string") &&
     (value.external_id === undefined ||
       typeof value.external_id === "string") &&
+    (value.severity === undefined || isTimelineSeverity(value.severity)) &&
+    (value.status === undefined || isTimelineStatus(value.status)) &&
+    (value.environment === undefined ||
+      typeof value.environment === "string") &&
+    (value.expires_at === undefined || isFiniteNumber(value.expires_at)) &&
+    (value.pinned === undefined || typeof value.pinned === "boolean") &&
+    (value.resolved_at === undefined || isFiniteNumber(value.resolved_at)) &&
     (value.client_reactions === undefined ||
       isReactionSummaryMap(value.client_reactions)) &&
     (value.channels === undefined || isStringArray(value.channels))

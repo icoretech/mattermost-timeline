@@ -224,6 +224,15 @@ func (p *Plugin) validateWebhookRequest(w http.ResponseWriter, r *http.Request, 
 	}
 	payload.TeamID = teamID
 
+	if payload.Severity != nil {
+		value := strings.ToLower(strings.TrimSpace(*payload.Severity))
+		payload.Severity = &value
+	}
+	if payload.Status != nil {
+		value := strings.ToLower(strings.TrimSpace(*payload.Status))
+		payload.Status = &value
+	}
+
 	eventType := payload.EventType
 	if eventType == "" {
 		eventType = "generic"
@@ -234,12 +243,16 @@ func (p *Plugin) validateWebhookRequest(w http.ResponseWriter, r *http.Request, 
 		return validatedWebhookRequest{}, handlerErr
 	}
 	payload.Channels = channelIDs
+	incomingLinks := normalizeLinks(payload)
+	if err := validateWebhookPayload(payload, incomingLinks); err != nil {
+		return validatedWebhookRequest{}, err
+	}
 
 	return validatedWebhookRequest{
 		teamID:        teamID,
 		payload:       payload,
 		eventType:     eventType,
-		incomingLinks: normalizeLinks(payload),
+		incomingLinks: incomingLinks,
 	}, nil
 }
 
@@ -288,21 +301,24 @@ func (p *Plugin) storeWebhookEvent(request validatedWebhookRequest) (storedWebho
 
 func applyWebhookUpdate(existing *Event, payload WebhookPayload, eventType string, incomingLinks []EventLink) []string {
 	oldChannels := existing.Channels
+	now := time.Now().UnixMilli()
 	existing.Title = payload.Title
 	existing.Message = payload.Message
 	existing.EventType = eventType
 	existing.Source = payload.Source
-	existing.Timestamp = time.Now().UnixMilli()
+	existing.Timestamp = now
 	existing.Links = mergeLinks(existing.Links, incomingLinks)
 	existing.Channels = payload.Channels
+	applyWebhookMetadata(existing, payload, now)
 	return oldChannels
 }
 
 func newWebhookEvent(teamID string, payload WebhookPayload, eventType string, incomingLinks []EventLink) Event {
-	return Event{
+	now := time.Now().UnixMilli()
+	event := Event{
 		ID:         uuid.New().String(),
 		TeamID:     teamID,
-		Timestamp:  time.Now().UnixMilli(),
+		Timestamp:  now,
 		Title:      payload.Title,
 		Message:    payload.Message,
 		Links:      incomingLinks,
@@ -311,6 +327,8 @@ func newWebhookEvent(teamID string, payload WebhookPayload, eventType string, in
 		ExternalID: payload.ExternalID,
 		Channels:   payload.Channels,
 	}
+	applyWebhookMetadata(&event, payload, now)
+	return event
 }
 
 func (p *Plugin) publishAndWriteTimelineEventResponse(w http.ResponseWriter, status int, eventName string, event Event) {
@@ -487,3 +505,32 @@ func (p *Plugin) handleMarkEventsRead(w http.ResponseWriter, r *http.Request) {
 		p.API.LogError("Failed to encode read state response", "error", err.Error())
 	}
 }
+
+func applyWebhookMetadata(event *Event, payload WebhookPayload, now int64) {
+	if payload.Severity != nil {
+		event.Severity = *payload.Severity
+	}
+	if payload.Status != nil {
+		event.Status = *payload.Status
+		if *payload.Status == "resolved" && (payload.ResolvedAt == nil || *payload.ResolvedAt == 0) {
+			event.ResolvedAt = now
+		}
+		if *payload.Status != "resolved" && payload.ResolvedAt != nil && *payload.ResolvedAt == 0 {
+			event.ResolvedAt = 0
+		}
+	}
+	if payload.Environment != nil {
+		event.Environment = *payload.Environment
+	}
+	if payload.ExpiresAt != nil {
+		event.ExpiresAt = *payload.ExpiresAt
+	}
+	if payload.Pinned != nil {
+		event.Pinned = *payload.Pinned
+	}
+	if payload.ResolvedAt != nil && (payload.Status == nil || *payload.Status != "resolved" || *payload.ResolvedAt != 0) {
+		event.ResolvedAt = *payload.ResolvedAt
+	}
+}
+
+func boolPtr(value bool) *bool { return &value }

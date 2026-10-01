@@ -1,10 +1,13 @@
 import React, { type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { EventEntry } from "../types/timeline";
-import TimelineEntry, {
+import TimelineEntry from "./timeline_entry";
+import {
   formatTimestamp,
+  isTimelineEventActive,
+  isTimelineEventExpired,
   renderMarkdown,
-} from "./timeline_entry";
+} from "./timeline_entry_helpers";
 
 const defaultTimestampDisplayPreferences = {
   locale: "en",
@@ -208,5 +211,145 @@ describe("TimelineEntry", () => {
     expect(time?.textContent).toContain("05:00");
     expect(time?.textContent).not.toMatch(/AM|PM/);
     expect(time?.getAttribute("title")).not.toMatch(/AM|PM/);
+  });
+
+  it("renders compact metadata for present metadata", () => {
+    const event: EventEntry = {
+      id: "event-1",
+      team_id: "team-1",
+      timestamp: Date.UTC(2026, 5, 25, 5, 0),
+      title: "metadata event",
+      event_type: "deploy",
+      source: "github-actions",
+      severity: "critical",
+      status: "open",
+      environment: "staging",
+      pinned: true,
+      expires_at: Date.now() - 1000,
+      resolved_at: Date.now() - 500,
+    };
+    const container = queryStaticTimelineEntry(event);
+
+    expect(container.querySelector(".timeline-entry__source")).toBeNull();
+    expect(
+      container.querySelector(".timeline-entry__type")?.getAttribute("title"),
+    ).toContain("source: github-actions");
+    expect(
+      Array.from(container.querySelectorAll(".timeline-entry__meta-item")).map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(["critical", "open", "staging", "pinned", "expired", "resolved"]);
+    expect(
+      container.querySelector(".timeline-entry__meta")?.getAttribute("title"),
+    ).toContain("source: github-actions");
+
+    const plain = queryStaticTimelineEntry({
+      id: "event-2",
+      team_id: "team-1",
+      timestamp: Date.UTC(2026, 5, 25, 5, 0),
+      title: "plain event",
+      event_type: "deploy",
+    });
+    expect(plain.querySelector(".timeline-entry__meta")).toBeNull();
+  });
+
+  it("omits successful info metadata from the compact row", () => {
+    const container = queryStaticTimelineEntry({
+      id: "event-1",
+      team_id: "team-1",
+      timestamp: Date.UTC(2026, 5, 25, 5, 0),
+      title: "quiet success event",
+      event_type: "deploy",
+      severity: "info",
+      status: "success",
+      environment: "production",
+    });
+
+    expect(
+      Array.from(container.querySelectorAll(".timeline-entry__meta-item")).map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(["production"]);
+  });
+
+  it("does not duplicate resolved when status already says resolved", () => {
+    const container = queryStaticTimelineEntry({
+      id: "event-1",
+      team_id: "team-1",
+      timestamp: Date.UTC(2026, 5, 25, 5, 0),
+      title: "resolved event",
+      event_type: "deploy",
+      status: "resolved",
+      resolved_at: Date.now() - 1000,
+    });
+
+    expect(
+      Array.from(container.querySelectorAll(".timeline-entry__meta-item")).map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(["resolved"]);
+  });
+
+  it("keeps unknown event types readable while using the generic fallback icon", () => {
+    const container = queryStaticTimelineEntry({
+      id: "event-1",
+      team_id: "team-1",
+      timestamp: Date.UTC(2026, 5, 25, 5, 0),
+      title: "custom event",
+      event_type: "custom_deploy",
+    });
+
+    expect(container.querySelector(".timeline-entry__type")?.textContent).toBe(
+      "custom deploy",
+    );
+    expect(container.querySelector(".timeline-entry__dot svg")).not.toBeNull();
+  });
+});
+
+describe("timeline event activity helpers", () => {
+  const now = 10_000;
+  const baseEvent: EventEntry = {
+    id: "event-1",
+    team_id: "team-1",
+    timestamp: now,
+    title: "event",
+    event_type: "info",
+  };
+
+  it.each([
+    ["no expiration", {}, false],
+    ["future expiration", { expires_at: now + 1 }, false],
+    ["expiration at now", { expires_at: now }, true],
+    ["past expiration", { expires_at: now - 1 }, true],
+  ])("reports expired state for %s", (_name, patch, expected) => {
+    expect(isTimelineEventExpired({ ...baseEvent, ...patch }, now)).toBe(
+      expected,
+    );
+  });
+
+  it.each([
+    [
+      "pinned terminal event remains active",
+      { pinned: true, status: "resolved" as const },
+      true,
+    ],
+    [
+      "expired critical event is inactive",
+      { severity: "critical" as const, expires_at: now },
+      false,
+    ],
+    [
+      "terminal critical event is inactive",
+      { severity: "critical" as const, status: "failed" as const },
+      false,
+    ],
+    ["open event is active", { status: "open" as const }, true],
+    ["running event is active", { status: "running" as const }, true],
+    ["critical event is active", { severity: "critical" as const }, true],
+    ["plain info event is inactive", { severity: "info" as const }, false],
+  ])("reports active state for %s", (_name, patch, expected) => {
+    expect(isTimelineEventActive({ ...baseEvent, ...patch }, now)).toBe(
+      expected,
+    );
   });
 });

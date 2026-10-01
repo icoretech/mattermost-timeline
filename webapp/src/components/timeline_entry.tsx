@@ -23,6 +23,13 @@ import React, { useCallback } from "react";
 import type { TimestampDisplayPreferences } from "../selectors";
 import type { EventEntry, EventLink, TimelineUser } from "../types/timeline";
 import ReactionBar from "./reaction_bar";
+import {
+  formatTimestamp,
+  formatTimestampTooltip,
+  isSafeUrl,
+  isTimelineEventExpired,
+  TimelineMarkdown,
+} from "./timeline_entry_helpers";
 
 interface Props {
   event: EventEntry;
@@ -39,7 +46,6 @@ interface Props {
 }
 
 const ICON_SIZE = 18;
-const SAFE_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 
 const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   host_online: { icon: CircleCheck, color: "#2dc26b" },
@@ -61,153 +67,45 @@ const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   generic: { icon: MapPin, color: "#868e96" },
 };
 
-function getHourCycle(useMilitaryTime: boolean): "h23" | "h12" {
-  return useMilitaryTime ? "h23" : "h12";
+function timelineMetadataItems(event: EventEntry) {
+  const items: string[] = [];
+
+  if (event.severity && event.severity !== "info") items.push(event.severity);
+  if (event.status && event.status !== "success") items.push(event.status);
+  if (event.environment) items.push(event.environment);
+  if (event.pinned) items.push("pinned");
+  if (isTimelineEventExpired(event)) items.push("expired");
+  if (event.resolved_at && event.status !== "resolved") items.push("resolved");
+
+  return items;
 }
 
-function getDateKeyForTimeZone(
-  date: Date,
-  preferences: TimestampDisplayPreferences,
-): string {
-  return new Intl.DateTimeFormat(preferences.locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: preferences.timeZone,
-  }).format(date);
+function timelineMetadataTitle(event: EventEntry) {
+  const parts: string[] = [];
+  if (event.source) parts.push(`source: ${event.source}`);
+  if (event.severity) parts.push(`severity: ${event.severity}`);
+  if (event.status) parts.push(`status: ${event.status}`);
+  if (event.environment) parts.push(`environment: ${event.environment}`);
+  if (event.pinned) parts.push("pinned");
+  if (isTimelineEventExpired(event)) parts.push("expired");
+  if (event.resolved_at && event.status !== "resolved") parts.push("resolved");
+  return parts.join(" · ");
 }
 
-export function formatTimestamp(
-  timestamp: number,
-  preferences: TimestampDisplayPreferences,
-  now = new Date(),
-): string {
-  const date = new Date(timestamp);
-  const timeOptions: Intl.DateTimeFormatOptions = {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: getHourCycle(preferences.useMilitaryTime),
-    timeZone: preferences.timeZone,
-  };
-  const time = date.toLocaleTimeString(preferences.locale, timeOptions);
+const HIGHLIGHTED_METADATA_ITEMS: Record<string, true> = {
+  critical: true,
+  warning: true,
+  open: true,
+  running: true,
+  failed: true,
+  pinned: true,
+  expired: true,
+};
 
-  if (
-    getDateKeyForTimeZone(date, preferences) ===
-    getDateKeyForTimeZone(now, preferences)
-  ) {
-    return time;
-  }
-
-  const dateStr = date.toLocaleDateString(preferences.locale, {
-    month: "short",
-    day: "numeric",
-    timeZone: preferences.timeZone,
-  });
-
-  return `${dateStr} ${time}`;
-}
-
-function formatTimestampTooltip(
-  timestamp: number,
-  preferences: TimestampDisplayPreferences,
-): string {
-  return new Date(timestamp).toLocaleString(preferences.locale, {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: getHourCycle(preferences.useMilitaryTime),
-    timeZone: preferences.timeZone,
-  });
-}
-
-function isSafeUrl(url: string): boolean {
-  const trimmedUrl = url.trim();
-  const schemeMatch = trimmedUrl.match(/^([a-zA-Z][a-zA-Z\d+\-.]*:)/);
-
-  if (!schemeMatch) {
-    return true;
-  }
-
-  return SAFE_URL_PROTOCOLS.has(schemeMatch[1].toLowerCase());
-}
-
-export function renderMarkdown(text: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    // Links: [text](url)
-    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
-    if (linkMatch) {
-      if (isSafeUrl(linkMatch[2])) {
-        parts.push(
-          <a
-            key={key++}
-            href={linkMatch[2]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="timeline-entry__md-link"
-          >
-            {linkMatch[1]}
-          </a>,
-        );
-      } else {
-        parts.push(linkMatch[1]);
-      }
-      remaining = remaining.slice(linkMatch[0].length);
-      continue;
-    }
-
-    // Bold: **text**
-    const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
-    if (boldMatch) {
-      parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
-      remaining = remaining.slice(boldMatch[0].length);
-      continue;
-    }
-
-    // Italic: *text*
-    const italicMatch = remaining.match(/^\*([^*]+)\*/);
-    if (italicMatch) {
-      parts.push(<em key={key++}>{italicMatch[1]}</em>);
-      remaining = remaining.slice(italicMatch[0].length);
-      continue;
-    }
-
-    // Inline code: `code`
-    const codeMatch = remaining.match(/^`([^`]+)`/);
-    if (codeMatch) {
-      parts.push(
-        <code key={key++} className="timeline-entry__md-code">
-          {codeMatch[1]}
-        </code>,
-      );
-      remaining = remaining.slice(codeMatch[0].length);
-      continue;
-    }
-
-    // Newline
-    if (remaining[0] === "\n") {
-      parts.push(<br key={key++} />);
-      remaining = remaining.slice(1);
-      continue;
-    }
-
-    // Plain text — consume until next special character
-    const nextSpecial = remaining.slice(1).search(/[[*`\n]/);
-    if (nextSpecial === -1) {
-      parts.push(remaining);
-      break;
-    }
-    parts.push(remaining.slice(0, nextSpecial + 1));
-    remaining = remaining.slice(nextSpecial + 1);
-  }
-
-  return parts;
+function timelineMetadataClassName(item: string) {
+  return HIGHLIGHTED_METADATA_ITEMS[item]
+    ? `timeline-entry__meta-item timeline-entry__meta-item--${item}`
+    : "timeline-entry__meta-item";
 }
 
 const TimelineEntry: React.FC<Props> = ({
@@ -239,13 +137,19 @@ const TimelineEntry: React.FC<Props> = ({
   if (isNew) className += " timeline-entry--new";
   else if (isUpdated) className += " timeline-entry--updated";
 
-  // Normalize: prefer links array, fall back to single link
   const links: EventLink[] =
     event.links && event.links.length > 0
       ? event.links
       : event.link
         ? [{ url: event.link }]
         : [];
+
+  const metadataItems = timelineMetadataItems(event);
+  const metadataTitle = timelineMetadataTitle(event);
+  const eventTypeLabel = event.event_type.replace(/_/g, " ");
+  const eventTypeTitle = event.source
+    ? `${eventTypeLabel} · source: ${event.source}`
+    : eventTypeLabel;
 
   return (
     <div
@@ -267,18 +171,12 @@ const TimelineEntry: React.FC<Props> = ({
       </div>
       <div className="timeline-entry__content">
         <div className="timeline-entry__header">
-          <span className="timeline-entry__header-left">
-            <span
-              className="timeline-entry__type"
-              style={{ color: config.color }}
-            >
-              {event.event_type.replace(/_/g, " ")}
-            </span>
-            {event.source && (
-              <span className="timeline-entry__source">
-                {`via ${event.source}`}
-              </span>
-            )}
+          <span
+            className="timeline-entry__type"
+            style={{ color: config.color }}
+            title={eventTypeTitle}
+          >
+            {eventTypeLabel}
           </span>
           <span
             className="timeline-entry__time"
@@ -290,10 +188,19 @@ const TimelineEntry: React.FC<Props> = ({
             {formatTimestamp(event.timestamp, timestampDisplayPreferences)}
           </span>
         </div>
+        {metadataItems.length > 0 && (
+          <div className="timeline-entry__meta" title={metadataTitle}>
+            {metadataItems.map((item) => (
+              <span key={item} className={timelineMetadataClassName(item)}>
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="timeline-entry__title">{event.title}</div>
         {event.message && (
           <div className="timeline-entry__message">
-            {renderMarkdown(event.message)}
+            <TimelineMarkdown text={event.message} />
           </div>
         )}
         {links.length > 0 && (

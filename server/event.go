@@ -46,18 +46,24 @@ func isAllowedReaction(icon string) bool {
 
 // Event represents a single event in the timeline.
 type Event struct {
-	ID         string         `json:"id"`
-	TeamID     string         `json:"team_id"`
-	Timestamp  int64          `json:"timestamp"`
-	Title      string         `json:"title"`
-	Message    string         `json:"message,omitempty"`
-	Link       string         `json:"link,omitempty"`
-	Links      []EventLink    `json:"links,omitempty"`
-	EventType  string         `json:"event_type"`
-	Source     string         `json:"source,omitempty"`
-	ExternalID string         `json:"external_id,omitempty"`
-	Reactions  EventReactions `json:"reactions,omitempty"`
-	Channels   []string       `json:"channels,omitempty"`
+	ID          string         `json:"id"`
+	TeamID      string         `json:"team_id"`
+	Timestamp   int64          `json:"timestamp"`
+	Title       string         `json:"title"`
+	Message     string         `json:"message,omitempty"`
+	Link        string         `json:"link,omitempty"`
+	Links       []EventLink    `json:"links,omitempty"`
+	EventType   string         `json:"event_type"`
+	Source      string         `json:"source,omitempty"`
+	ExternalID  string         `json:"external_id,omitempty"`
+	Severity    string         `json:"severity,omitempty"`
+	Status      string         `json:"status,omitempty"`
+	Environment string         `json:"environment,omitempty"`
+	ExpiresAt   int64          `json:"expires_at,omitempty"`
+	Pinned      bool           `json:"pinned,omitempty"`
+	ResolvedAt  int64          `json:"resolved_at,omitempty"`
+	Reactions   EventReactions `json:"reactions,omitempty"`
+	Channels    []string       `json:"channels,omitempty"`
 }
 
 // ClientEvent is the timeline event shape exposed over HTTP and WebSocket APIs.
@@ -72,21 +78,33 @@ type ClientEvent struct {
 	EventType       string                           `json:"event_type"`
 	Source          string                           `json:"source,omitempty"`
 	ExternalID      string                           `json:"external_id,omitempty"`
+	Severity        string                           `json:"severity,omitempty"`
+	Status          string                           `json:"status,omitempty"`
+	Environment     string                           `json:"environment,omitempty"`
+	ExpiresAt       int64                            `json:"expires_at,omitempty"`
+	Pinned          bool                             `json:"pinned,omitempty"`
+	ResolvedAt      int64                            `json:"resolved_at,omitempty"`
 	Channels        []string                         `json:"channels,omitempty"`
 	ClientReactions map[string]ReactionClientSummary `json:"client_reactions,omitempty"`
 }
 
 // WebhookPayload is the expected JSON body from external services.
 type WebhookPayload struct {
-	Title      string      `json:"title"`
-	Message    string      `json:"message,omitempty"`
-	Link       string      `json:"link,omitempty"`
-	Links      []EventLink `json:"links,omitempty"`
-	EventType  string      `json:"event_type"`
-	Source     string      `json:"source,omitempty"`
-	TeamID     string      `json:"team_id,omitempty"`
-	ExternalID string      `json:"external_id,omitempty"`
-	Channels   []string    `json:"channels,omitempty"`
+	Title       string      `json:"title"`
+	Message     string      `json:"message,omitempty"`
+	Link        string      `json:"link,omitempty"`
+	Links       []EventLink `json:"links,omitempty"`
+	EventType   string      `json:"event_type"`
+	Source      string      `json:"source,omitempty"`
+	TeamID      string      `json:"team_id,omitempty"`
+	ExternalID  string      `json:"external_id,omitempty"`
+	Channels    []string    `json:"channels,omitempty"`
+	Severity    *string     `json:"severity,omitempty"`
+	Status      *string     `json:"status,omitempty"`
+	Environment *string     `json:"environment,omitempty"`
+	ExpiresAt   *int64      `json:"expires_at,omitempty"`
+	Pinned      *bool       `json:"pinned,omitempty"`
+	ResolvedAt  *int64      `json:"resolved_at,omitempty"`
 }
 
 // EventsResponse is returned by the GET /api/v1/events endpoint.
@@ -111,6 +129,12 @@ func clientEventFrom(event Event, currentUserID string) ClientEvent {
 		Source:          event.Source,
 		ExternalID:      event.ExternalID,
 		Channels:        event.Channels,
+		Severity:        event.Severity,
+		Status:          event.Status,
+		Environment:     event.Environment,
+		ExpiresAt:       event.ExpiresAt,
+		Pinned:          event.Pinned,
+		ResolvedAt:      event.ResolvedAt,
 		ClientReactions: event.Reactions.ToClientSummaries(currentUserID),
 	}
 }

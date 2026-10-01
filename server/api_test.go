@@ -1691,3 +1691,104 @@ func TestHandleWebhook_TooManyChannels(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
+
+func expectWebhookEventCreate(api *plugintest.API, teamID string) {
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", globalIndexKey(teamID)).Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", globalIndexKey(teamID), mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", retentionIndexKey(teamID)).Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", retentionIndexKey(teamID), mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
+}
+
+func TestHandleWebhook_MetadataFieldsRoundTrip(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	payload := `{"title":"incident","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","severity":"critical","status":"open","environment":"staging","expires_at":4102444800000,"pinned":true,"resolved_at":12345}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event ClientEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "critical", event.Severity)
+	assert.Equal(t, "open", event.Status)
+	assert.Equal(t, "staging", event.Environment)
+	assert.Equal(t, int64(4102444800000), event.ExpiresAt)
+	assert.True(t, event.Pinned)
+	assert.Equal(t, int64(12345), event.ResolvedAt)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsInvalidPayloadMetadataAndLinks(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     string
+		wantMessage string
+	}{
+		{
+			name:        "overlong title",
+			payload:     fmt.Sprintf(`{"title":"%s","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`, strings.Repeat("a", maxWebhookTitleLength+1)),
+			wantMessage: "title exceeds maximum length",
+		},
+		{
+			name: "too many links",
+			payload: func() string {
+				links := make([]EventLink, maxWebhookLinkCount+1)
+				for i := range links {
+					links[i] = EventLink{URL: fmt.Sprintf("https://example.com/%d", i)}
+				}
+				body, err := json.Marshal(WebhookPayload{Title: "links", TeamID: "aaaaaaaaaaaaaaaaaaaaaaaaaa", Links: links})
+				require.NoError(t, err)
+				return string(body)
+			}(),
+			wantMessage: "Maximum 10 links per event",
+		},
+		{
+			name:        "unsafe link scheme",
+			payload:     `{"title":"bad link","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","links":[{"url":"javascript:alert(1)","label":"x"}]}`,
+			wantMessage: "Unsupported link URL scheme",
+		},
+		{
+			name:        "invalid severity",
+			payload:     `{"title":"bad severity","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","severity":"urgent"}`,
+			wantMessage: "invalid severity",
+		},
+		{
+			name:        "invalid status",
+			payload:     `{"title":"bad status","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","status":"mystery"}`,
+			wantMessage: "invalid status",
+		},
+		{
+			name:        "negative expires_at",
+			payload:     `{"title":"bad expiry","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","expires_at":-1}`,
+			wantMessage: "expires_at must be non-negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api := &plugintest.API{}
+			cfg := &configuration{WebhookSecret: "s3cret"}
+			p := newTestPlugin(t, api, cfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(tt.payload))
+			req.Header.Set("X-Webhook-Secret", "s3cret")
+			rec := httptest.NewRecorder()
+
+			p.router.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.wantMessage)
+			api.AssertExpectations(t)
+		})
+	}
+}

@@ -12,6 +12,18 @@ export interface ReactionClientSummary {
   recent_users: string[];
 }
 
+export const TIMELINE_SEVERITIES = ["info", "warning", "critical"] as const;
+export const TIMELINE_STATUSES = [
+  "open",
+  "running",
+  "success",
+  "failed",
+  "resolved",
+] as const;
+
+export type TimelineSeverity = (typeof TIMELINE_SEVERITIES)[number];
+export type TimelineStatus = (typeof TIMELINE_STATUSES)[number];
+
 export interface EventEntry {
   id: string;
   team_id: string;
@@ -23,6 +35,12 @@ export interface EventEntry {
   event_type: string;
   source?: string;
   external_id?: string;
+  severity?: TimelineSeverity;
+  status?: TimelineStatus;
+  environment?: string;
+  expires_at?: number;
+  pinned?: boolean;
+  resolved_at?: number;
   client_reactions?: Record<string, ReactionClientSummary>;
   channels?: string[];
 }

@@ -100,29 +100,69 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    margin-bottom: 2px;
-  }
-
-  &__header-left {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
+    gap: 8px;
+    margin-bottom: 1px;
   }
 
   &__type {
+    min-width: 0;
+    overflow: hidden;
+    color: inherit;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.35px;
+    text-overflow: ellipsis;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   &__time {
-    font-size: 11px;
-    color: rgba(var(--center-channel-color-rgb), 0.48);
     flex-shrink: 0;
-    margin-left: 8px;
+    color: rgba(var(--center-channel-color-rgb), 0.48);
+    font-size: 11px;
+  }
+
+  &__meta {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    margin-bottom: 2px;
+    overflow: hidden;
+    color: rgba(var(--center-channel-color-rgb), 0.48);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  &__meta-item {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(var(--center-channel-color-rgb), 0.48);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__meta-item:not(:first-child)::before {
+    margin-right: 4px;
+    color: rgba(var(--center-channel-color-rgb), 0.32);
+    content: "•";
+  }
+
+  &__meta-item--critical,
+  &__meta-item--failed,
+  &__meta-item--expired {
+    color: rgba(var(--error-text-color-rgb, 210, 75, 78), 0.88);
+    font-weight: 600;
+  }
+
+  &__meta-item--warning,
+  &__meta-item--open,
+  &__meta-item--running,
+  &__meta-item--pinned {
+    color: rgba(var(--away-indicator-rgb, 255, 188, 31), 0.92);
+    font-weight: 600;
   }
 
   &__title {
@@ -241,6 +281,15 @@
   }
 }
 
+.event-feed-section-heading {
+  margin: 10px 0 2px 44px;
+  color: rgba(var(--center-channel-color-rgb), 0.48);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
 // Load more button
 .event-feed-load-more {
   display: block;
@@ -302,6 +351,19 @@
     font-size: 13px;
     font-weight: 400;
     color: rgba(var(--center-channel-color-rgb), 0.4);
+  }
+
+  &__endpoint {
+    display: inline-block;
+    max-width: 100%;
+    padding: 2px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 3px;
+    background: rgba(var(--center-channel-color-rgb), 0.08);
+    color: rgba(var(--center-channel-color-rgb), 0.56);
+    font-size: 11px;
   }
 }
 
@@ -439,3 +501,4 @@
     object-fit: cover;
   }
 }
+
