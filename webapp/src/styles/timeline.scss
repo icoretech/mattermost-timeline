@@ -588,7 +588,7 @@
 .timeline-admin-settings {
   --timeline-settings-border: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.16);
   --timeline-settings-border-strong: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.24);
-  --timeline-settings-muted: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.56);
+  --timeline-settings-muted: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.76);
   --timeline-settings-surface: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.04);
   --timeline-settings-surface-strong: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.07);
 
@@ -669,6 +669,36 @@
     max-width: 62ch;
     margin: 0;
     color: var(--timeline-settings-muted);
+  }
+
+  &__help {
+    color: var(--timeline-settings-muted);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  &__guide {
+    color: var(--timeline-settings-muted);
+
+    summary {
+      width: fit-content;
+      color: rgba(var(--button-bg-rgb, 28, 88, 217), 1);
+      cursor: pointer;
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    pre {
+      padding: 8px 10px;
+      overflow-x: auto;
+      border: 1px solid var(--timeline-settings-border);
+      border-radius: 4px;
+      background: var(--timeline-settings-surface);
+      color: inherit;
+      font-size: 12px;
+    }
   }
 
   &__rows {
@@ -793,6 +823,15 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+
+  &__legacy {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--timeline-settings-surface-strong);
+    font-size: 10px;
+    font-weight: 600;
+  }
   &__section {
     display: flex;
     flex-direction: column;
@@ -878,27 +917,30 @@
     font-weight: 600;
   }
 
-  &__actions,
-  &__form {
+  &__actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
   }
 
   &__form {
-    align-items: flex-end;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
 
     label {
       display: flex;
-      flex: 1 1 180px;
       flex-direction: column;
       gap: 4px;
       min-width: 0;
+      margin: 0;
       font-weight: 600;
     }
 
     button {
-      flex: 0 0 auto;
+      grid-column: 1 / -1;
+      justify-self: start;
+      min-height: 34px;
     }
   }
 
@@ -925,8 +967,7 @@
   }
 
   .timeline-admin-settings__form {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 }
 

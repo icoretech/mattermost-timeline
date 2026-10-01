@@ -28,24 +28,14 @@ const manifest = JSON.parse(
         "bundle_path": "webapp/dist/main.js"
     },
     "settings_schema": {
-        "header": "Configure the Mattermost Timeline plugin.",
-        "footer": "",
+        "header": "Add a token for each integration, then copy a webhook URL and send events to your team or channel.",
+        "footer": "Select Save tokens to apply token changes. Use Save at the bottom for the other settings.",
         "settings": [
-            {
-                "key": "WebhookSecret",
-                "display_name": "Webhook Secret",
-                "type": "text",
-                "help_text": "Shared secret for authenticating incoming webhooks. External services must send this in the X-Webhook-Secret header.",
-                "placeholder": "",
-                "default": "",
-                "hosting": "",
-                "secret": true
-            },
             {
                 "key": "WebhookTokens",
                 "display_name": "Webhook Tokens",
                 "type": "custom",
-                "help_text": "Manage named webhook credentials with fields name, secret, enabled, team, channels, and require_signature. Leave a secret blank only when updating an existing token and keeping its stored secret.",
+                "help_text": "",
                 "placeholder": "",
                 "default": "[]",
                 "hosting": "",
@@ -55,9 +45,29 @@ const manifest = JSON.parse(
                 "key": "RequireSignedWebhooks",
                 "display_name": "Require Signed Webhooks",
                 "type": "bool",
-                "help_text": "Require X-Timeline-Timestamp and X-Timeline-Signature for all webhook credentials. Leave disabled to preserve legacy X-Webhook-Secret integrations while accepting signed requests.",
+                "help_text": "Require signatures for every token and the legacy secret. Enable only after all senders support signing. When disabled, individual tokens can still require a signature.",
                 "placeholder": "",
                 "default": false,
+                "hosting": "",
+                "secret": false
+            },
+            {
+                "key": "WebhookSecret",
+                "display_name": "Webhook Secret (legacy)",
+                "type": "text",
+                "help_text": "For existing integrations that share one secret. This secret has no team or channel restrictions. Use a token above for new integrations.",
+                "placeholder": "",
+                "default": "",
+                "hosting": "",
+                "secret": true
+            },
+            {
+                "key": "WebhookTools",
+                "display_name": "Webhook URLs \u0026 Test",
+                "type": "custom",
+                "help_text": "",
+                "placeholder": "",
+                "default": "",
                 "hosting": "",
                 "secret": false
             },
@@ -65,7 +75,7 @@ const manifest = JSON.parse(
                 "key": "MaxEventsStored",
                 "display_name": "Maximum Events Stored",
                 "type": "text",
-                "help_text": "Maximum number of events to persist per team. Oldest events are pruned when this limit is exceeded. Default: 500.",
+                "help_text": "Events kept per team. Once this limit is reached, the oldest events are removed.",
                 "placeholder": "",
                 "default": "500",
                 "hosting": "",
@@ -75,7 +85,7 @@ const manifest = JSON.parse(
                 "key": "MaxEventsDisplayed",
                 "display_name": "Maximum Events Displayed",
                 "type": "text",
-                "help_text": "Maximum number of events shown in the timeline at once. Default: 100.",
+                "help_text": "Maximum number of events loaded per request. Users can load older events in the timeline.",
                 "placeholder": "",
                 "default": "100",
                 "hosting": "",
@@ -85,7 +95,7 @@ const manifest = JSON.parse(
                 "key": "TimelineOrder",
                 "display_name": "Timeline Order",
                 "type": "dropdown",
-                "help_text": "Controls the display order of events in the timeline. Oldest-first shows newest events at the bottom; newest-first shows newest events at the top.",
+                "help_text": "Choose whether new events appear at the top or bottom of the timeline.",
                 "placeholder": "",
                 "default": "oldest_first",
                 "options": [
@@ -105,19 +115,9 @@ const manifest = JSON.parse(
                 "key": "EnableReactions",
                 "display_name": "Enable Reactions",
                 "type": "bool",
-                "help_text": "Allow users to react to timeline events with icon-based reactions.",
+                "help_text": "Let users add reactions to timeline events.",
                 "placeholder": "",
                 "default": true,
-                "hosting": "",
-                "secret": false
-            },
-            {
-                "key": "WebhookTools",
-                "display_name": "Webhook Tools",
-                "type": "custom",
-                "help_text": "Copy the webhook URL, inspect sanitized webhook configuration, and send a test timeline event.",
-                "placeholder": "",
-                "default": "",
                 "hosting": "",
                 "secret": false
             }

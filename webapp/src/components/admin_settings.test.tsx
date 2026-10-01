@@ -89,13 +89,16 @@ function tokenButton(container: HTMLElement, text: string) {
   return button;
 }
 
-function mockWebhookConfigResponse(tokens: unknown[] = []) {
+function mockWebhookConfigResponse(
+  tokens: unknown[] = [],
+  requireSignedWebhooks = false,
+) {
   return {
     ok: true,
     json: () =>
       Promise.resolve({
         legacy_secret_configured: false,
-        require_signed_webhooks: false,
+        require_signed_webhooks: requireSignedWebhooks,
         tokens,
         webhook_path: "/webhook",
         batch_webhook_path: "/webhook/batch",
@@ -114,6 +117,38 @@ describe("WebhookTokensSetting", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
+  });
+
+  it("connects scope hints to the fields and provides expandable sending instructions", async () => {
+    globalThis.fetch = vi.fn();
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        { name: "sample-token", secret: "sample-secret" },
+      ]),
+    });
+
+    for (const field of ["name", "secret", "team", "channels"]) {
+      const input = tokenInput(container, `Token 1 ${field}`);
+      const descriptionId = input.getAttribute("aria-describedby");
+      expect(descriptionId).toBeTruthy();
+      expect(
+        document.getElementById(descriptionId || "")?.textContent,
+      ).toBeTruthy();
+    }
+
+    const guide = container.querySelector("details");
+    expect(guide?.open).toBe(false);
+    await act(async () => {
+      guide?.querySelector("summary")?.click();
+      await flushAsyncUpdates();
+    });
+    expect(guide?.open).toBe(true);
+    expect(guide?.textContent).toContain("X-Webhook-Secret");
+    expect(guide?.textContent).toContain("X-Timeline-Timestamp");
+    expect(guide?.textContent).toContain("X-Timeline-Signature");
+    expect(guide?.textContent).toContain("HMAC-SHA256");
+
+    await cleanup(root, container);
   });
 
   it("renders non-empty saved token JSON as structured credential fields", async () => {
@@ -232,7 +267,7 @@ describe("WebhookTokensSetting", () => {
     });
 
     await act(async () => {
-      tokenButton(container, "Save token credentials").click();
+      tokenButton(container, "Save tokens").click();
       await flushAsyncUpdates();
     });
 
@@ -259,7 +294,7 @@ describe("WebhookTokensSetting", () => {
       ],
     });
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
-      "Webhook token credentials saved",
+      "Tokens saved",
     );
     expect(tokenInput(container, "Token 1 name").value).toBe("deploy-prod");
     expect(tokenInput(container, "Token 1 secret").value).toBe("");
@@ -292,7 +327,7 @@ describe("WebhookTokensSetting", () => {
     });
 
     await act(async () => {
-      tokenButton(container, "Save token credentials").click();
+      tokenButton(container, "Save tokens").click();
       await flushAsyncUpdates();
     });
 
@@ -315,7 +350,7 @@ describe("WebhookTokensSetting", () => {
 
     await act(async () => {
       tokenButton(container, "Add token").click();
-      tokenButton(container, "Save token credentials").click();
+      tokenButton(container, "Save tokens").click();
       await flushAsyncUpdates();
     });
 
@@ -348,7 +383,7 @@ describe("WebhookTokensSetting", () => {
     expect(tokenInput(container, "Token 1 name")).toBe(nameInput);
     expect(nameInput.value).toBe("edited-token");
     expect(nameInput.disabled).toBe(true);
-    expect(container.textContent).toContain("Unsaved credential changes");
+    expect(container.textContent).toContain("Unsaved token changes");
 
     await act(async () => {
       root.render(<WebhookTokensSetting value={value} />);
@@ -356,9 +391,7 @@ describe("WebhookTokensSetting", () => {
     });
 
     expect(nameInput.disabled).toBe(false);
-    expect(tokenButton(container, "Save token credentials").disabled).toBe(
-      false,
-    );
+    expect(tokenButton(container, "Save tokens").disabled).toBe(false);
     expect(globalThis.fetch).not.toHaveBeenCalled();
 
     await cleanup(root, container);
@@ -379,7 +412,7 @@ describe("WebhookTokensSetting", () => {
       await flushAsyncUpdates();
     });
     await act(async () => {
-      tokenButton(container, "Save token credentials").click();
+      tokenButton(container, "Save tokens").click();
       await flushAsyncUpdates();
     });
 
@@ -401,10 +434,8 @@ describe("WebhookTokensSetting", () => {
     );
     expect(tokenInput(container, "Token 1 secret").value).toBe("");
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.textContent).not.toContain("Unsaved credential changes");
-    expect(tokenButton(container, "Save token credentials").disabled).toBe(
-      true,
-    );
+    expect(container.textContent).not.toContain("Unsaved token changes");
+    expect(tokenButton(container, "Save tokens").disabled).toBe(true);
 
     await cleanup(root, container);
   });
@@ -501,20 +532,42 @@ describe("AdminSettings", () => {
       `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
       { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
-    expect(container.querySelector("dt")?.textContent).toBe("Legacy secret");
+    expect(container.querySelector("dt")?.textContent).toBe(
+      "Shared secret Legacy",
+    );
     expect(container.textContent).toContain("configured");
     expect(container.textContent).toContain("Signed webhooks");
     expect(container.textContent).toContain("required");
-    expect(container.textContent).toContain("Tokens");
+    expect(container.textContent).toContain("Configured tokens");
     expect(container.textContent).toContain("1");
     expect(container.textContent).toContain("github-actions");
-    expect(container.textContent).toContain("signed");
+    expect(container.textContent).toContain("signature required");
     expect(container.textContent).not.toContain("replace-with-secret");
 
     await cleanup(root, container);
   });
 
-  it("copies webhook paths returned by the server", async () => {
+  it("shows the global signature requirement on tokens without an individual requirement", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        mockWebhookConfigResponse(
+          [{ name: "sample-token", enabled: true, require_signature: false }],
+          true,
+        ),
+      );
+    const { container, root } = await renderAdminSettings();
+
+    expect(
+      container.querySelector('[aria-label="Configured webhook tokens"]')
+        ?.textContent,
+    ).toContain("signature required");
+    expect(container.textContent).toContain("required for all");
+
+    await cleanup(root, container);
+  });
+
+  it("copies absolute webhook URLs with the team placeholder intact", async () => {
     const { container, root } = await renderAdminSettings();
     const [copyWebhook, copyBatch] = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button"),
@@ -524,20 +577,47 @@ describe("AdminSettings", () => {
       copyWebhook.click();
       await Promise.resolve();
     });
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      "/plugins/ch.icorete.mattermost-timeline/webhook?team_id=<team-id-or-name>",
+    const webhookURL = new URL(
+      vi.mocked(navigator.clipboard.writeText).mock.calls[0][0],
     );
+    expect(webhookURL.origin).toBe(window.location.origin);
+    expect(webhookURL.pathname).toBe(`/plugins/${manifest.id}/webhook`);
+    expect(webhookURL.searchParams.get("team_id")).toBe("<team-id-or-name>");
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
-      "Webhook path copied",
+      "Webhook URL copied",
     );
 
     await act(async () => {
       copyBatch.click();
       await Promise.resolve();
     });
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      "/plugins/ch.icorete.mattermost-timeline/webhook/batch?team_id=<team-id-or-name>",
+    const batchURL = new URL(
+      vi.mocked(navigator.clipboard.writeText).mock.calls[1][0],
     );
+    expect(batchURL.origin).toBe(window.location.origin);
+    expect(batchURL.pathname).toBe(`/plugins/${manifest.id}/webhook/batch`);
+    expect(batchURL.searchParams.get("team_id")).toBe("<team-id-or-name>");
+
+    await cleanup(root, container);
+  });
+
+  it("reports an unavailable clipboard instead of claiming that a URL was copied", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    const { container, root } = await renderAdminSettings();
+    const copyWebhook = tokenButton(container, "Copy webhook URL");
+
+    await act(async () => {
+      copyWebhook.click();
+      await flushAsyncUpdates();
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Clipboard is not available in this browser",
+    );
+    expect(container.querySelector('[role="status"]')).toBeNull();
 
     await cleanup(root, container);
   });

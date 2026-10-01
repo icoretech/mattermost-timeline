@@ -184,8 +184,7 @@ function tokenEditorReducer(
         request: "idle",
         loadError: "",
         saveError: "",
-        saveMessage:
-          action.type === "saved" ? "Webhook token credentials saved" : "",
+        saveMessage: action.type === "saved" ? "Tokens saved" : "",
       };
     case "loadFailed":
       return { ...state, request: "idle", loadError: action.error };
@@ -243,16 +242,27 @@ function WebhookTokenRow({
           <span>{"Name"}</span>
           <input
             aria-label={`Token ${tokenNumber} name`}
+            aria-describedby={`${token.rowId}-name-help`}
+            placeholder="e.g. deploy-bot"
             disabled={disabled}
             type="text"
             value={token.name}
             onChange={(event) => onChange({ name: event.currentTarget.value })}
           />
+          <small
+            id={`${token.rowId}-name-help`}
+            className="timeline-token-settings__help"
+          >
+            {
+              "A unique name for this integration. Used as the event source when the sender omits source."
+            }
+          </small>
         </label>
         <label className="timeline-token-settings__field">
           <span>{"Secret"}</span>
           <input
             aria-label={`Token ${tokenNumber} secret`}
+            aria-describedby={`${token.rowId}-secret-help`}
             autoComplete="new-password"
             disabled={disabled}
             type="password"
@@ -261,24 +271,40 @@ function WebhookTokenRow({
               onChange({ secret: event.currentTarget.value })
             }
           />
+          <small
+            id={`${token.rowId}-secret-help`}
+            className="timeline-token-settings__help"
+          >
+            {
+              "New or renamed tokens need a secret before they can be enabled. Leave blank to keep an existing token's secret."
+            }
+          </small>
         </label>
         <label className="timeline-token-settings__field timeline-token-settings__field--wide">
-          <span>{"Team scope"}</span>
+          <span>{"Allowed team (optional)"}</span>
           <input
             aria-label={`Token ${tokenNumber} team`}
+            aria-describedby={`${token.rowId}-team-help`}
             disabled={disabled}
-            placeholder="optional team id or name"
+            placeholder="e.g. example-org"
             type="text"
             value={token.team}
             onChange={(event) => onChange({ team: event.currentTarget.value })}
           />
+          <small
+            id={`${token.rowId}-team-help`}
+            className="timeline-token-settings__help"
+          >
+            {"Leave blank for any team, or enter one team name or ID."}
+          </small>
         </label>
         <label className="timeline-token-settings__field timeline-token-settings__field--wide">
-          <span>{"Channel scopes"}</span>
+          <span>{"Allowed channels (optional)"}</span>
           <textarea
             aria-label={`Token ${tokenNumber} channels`}
+            aria-describedby={`${token.rowId}-channels-help`}
             disabled={disabled}
-            placeholder="town-square, deployments\nalerts"
+            placeholder="e.g. town-square, alerts"
             rows={2}
             value={token.channels.join("\n")}
             onChange={(event) =>
@@ -287,6 +313,14 @@ function WebhookTokenRow({
               })
             }
           />
+          <small
+            id={`${token.rowId}-channels-help`}
+            className="timeline-token-settings__help"
+          >
+            {
+              "Leave blank for all channels and team-wide events. To restrict delivery, list channel names or IDs separated by commas or new lines. The sender must include allowed channels in its payload."
+            }
+          </small>
         </label>
       </div>
       <div className="timeline-token-settings__checks">
@@ -302,7 +336,7 @@ function WebhookTokenRow({
               })
             }
           />
-          <span>{"Enabled"}</span>
+          <span>{"Accept events"}</span>
         </label>
         <label>
           <input
@@ -319,6 +353,11 @@ function WebhookTokenRow({
           <span>{"Require signed requests"}</span>
         </label>
       </div>
+      <small className="timeline-token-settings__help">
+        {
+          "Uncheck Accept events to pause this integration without deleting its token."
+        }
+      </small>
     </fieldset>
   );
 }
@@ -340,6 +379,48 @@ export function WebhookTokensSetting({
       parseError={parsed.error}
       disabled={disabled}
     />
+  );
+}
+
+function WebhookRequestHelp() {
+  return (
+    <details className="timeline-token-settings__guide">
+      <summary>{"How to send events"}</summary>
+      <p>
+        {
+          "Copy a webhook URL below and replace its team_id value with a team name or ID. Send a JSON body with a title, for example:"
+        }
+      </p>
+      <pre>
+        <code>{'{"title":"Deployment completed","status":"success"}'}</code>
+      </pre>
+      <p>
+        {"For unsigned requests, send the token's secret in the "}
+        <code>{"X-Webhook-Secret"}</code>
+        {" header."}
+      </p>
+      <p>
+        {"When signatures are required, send "}
+        <code>{"X-Timeline-Timestamp"}</code>
+        {" (Unix seconds) and "}
+        <code>{"X-Timeline-Signature"}</code>
+        {
+          ". Sign the timestamp, a dot and the exact request body with HMAC-SHA256 and the token secret:"
+        }
+      </p>
+      <pre>
+        <code>
+          {
+            "X-Timeline-Timestamp: <unix-seconds>\nX-Timeline-Signature: sha256=<hex-hmac>\n\nmessage to sign = <unix-seconds>.<request-body>"
+          }
+        </code>
+      </pre>
+      <p>
+        {
+          "Use a fresh timestamp for each request. Timestamps outside a five-minute window and repeated signatures are rejected."
+        }
+      </p>
+    </details>
   );
 }
 
@@ -442,7 +523,7 @@ function WebhookTokensEditor({
     <div className="timeline-token-settings">
       <p className="timeline-token-settings__intro">
         {
-          "Use named credentials instead of raw JSON. Leave Secret blank only when updating an existing token and keeping its stored secret."
+          "Create one token per integration. Give it a name and secret, then choose which teams and channels it can publish to."
         }
       </p>
       {isLoading && (
@@ -476,9 +557,7 @@ function WebhookTokensEditor({
       </div>
       {tokens.length === 0 && !parseError && !isLoading && (
         <div className="timeline-token-settings__empty">
-          {
-            "No named tokens configured. The legacy Webhook Secret still works when configured."
-          }
+          {"No tokens yet. Select Add token to connect your first integration."}
         </div>
       )}
       <div className="timeline-token-settings__actions">
@@ -496,11 +575,11 @@ function WebhookTokensEditor({
           disabled={!canSave}
           onClick={saveTokens}
         >
-          {isSaving ? "Saving..." : "Save token credentials"}
+          {isSaving ? "Saving..." : "Save tokens"}
         </button>
         {dirty && !isSaving && !saveMessage && (
           <span className="timeline-token-settings__note" role="status">
-            {"Unsaved credential changes"}
+            {"Unsaved token changes"}
           </span>
         )}
       </div>
@@ -514,6 +593,7 @@ function WebhookTokensEditor({
           {saveError}
         </div>
       )}
+      <WebhookRequestHelp />
     </div>
   );
 }
@@ -564,8 +644,10 @@ export default function AdminSettings() {
     setError("");
     setMessage("");
     try {
-      await navigator.clipboard?.writeText(path);
-      setMessage("Webhook path copied");
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      const url = new URL(path, window.location.origin);
+      await navigator.clipboard.writeText(url.toString());
+      setMessage("Webhook URL copied");
     } catch {
       setError("Clipboard is not available in this browser");
     }
@@ -622,12 +704,21 @@ export default function AdminSettings() {
           className="timeline-admin-settings__section"
         >
           <div className="timeline-admin-settings__section-header">
-            <strong>{"Webhook configuration"}</strong>
-            <span>{"Sanitized status from this server."}</span>
+            <strong>{"Webhook endpoints"}</strong>
+            <span>
+              {
+                "Use the webhook URL for one event, or the batch URL for up to 50 events."
+              }
+            </span>
           </div>
           <dl className="timeline-admin-settings__status-grid">
             <div>
-              <dt>{"Legacy secret"}</dt>
+              <dt>
+                {"Shared secret "}
+                <span className="timeline-admin-settings__legacy">
+                  {"Legacy"}
+                </span>
+              </dt>
               <dd>
                 {config.legacy_secret_configured
                   ? "configured"
@@ -637,11 +728,13 @@ export default function AdminSettings() {
             <div>
               <dt>{"Signed webhooks"}</dt>
               <dd>
-                {config.require_signed_webhooks ? "required" : "optional"}
+                {config.require_signed_webhooks
+                  ? "required for all"
+                  : "set per token"}
               </dd>
             </div>
             <div>
-              <dt>{"Tokens"}</dt>
+              <dt>{"Configured tokens"}</dt>
               <dd>{config.tokens.length}</dd>
             </div>
           </dl>
@@ -656,11 +749,16 @@ export default function AdminSettings() {
                     {token.name || "unnamed"}
                   </span>
                   {!token.enabled && <span>{"disabled"}</span>}
-                  {token.require_signature && <span>{"signed"}</span>}
-                  {token.team && <span>{token.team}</span>}
+                  {(config.require_signed_webhooks ||
+                    token.require_signature) && (
+                    <span>{"signature required"}</span>
+                  )}
+                  <span>{token.team ? `team: ${token.team}` : "any team"}</span>
                   {token.channels?.length ? (
-                    <span>{token.channels.join(", ")}</span>
-                  ) : null}
+                    <span>{`channels: ${token.channels.join(", ")}`}</span>
+                  ) : (
+                    <span>{"all channels"}</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -684,11 +782,15 @@ export default function AdminSettings() {
       >
         <div className="timeline-admin-settings__section-header">
           <strong>{"Send a test event"}</strong>
-          <span>{"Use a team name or id; channel is optional."}</span>
+          <span>
+            {
+              "Create an event in the selected team or channel. This checks timeline delivery, not webhook authentication or signatures."
+            }
+          </span>
         </div>
         <div className="timeline-admin-settings__form">
           <label>
-            <span>{"Team ID or name"}</span>
+            <span>{"Team name or ID"}</span>
             <input
               placeholder="example-org"
               type="text"
@@ -697,7 +799,7 @@ export default function AdminSettings() {
             />
           </label>
           <label>
-            <span>{"Channel ID or name"}</span>
+            <span>{"Channel name or ID (optional)"}</span>
             <input
               placeholder="optional, e.g. town-square"
               type="text"
