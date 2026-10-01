@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/icoretech/mattermost-timeline/compare/v2.0.0...v2.0.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **admin:** cancel stale requests and prevent duplicate token saves and test events ([c23a3d1](https://github.com/icoretech/mattermost-timeline/commit/c23a3d15070d4a7d0cd714ef53e3b71a6327e4e7))
+
 ## [2.0.0](https://github.com/icoretech/mattermost-timeline/compare/v1.5.1...v2.0.0) (2026-10-01)
 
 
