@@ -1074,7 +1074,7 @@ export interface PluginRegistry {
           switcherLinkURL: string,
           mainComponent: ReactResolvable,
           headerCentreComponent: ReactResolvable,
-          headerRightComponent?: ReactResolvable,
+          headerRightComponent: ReactResolvable | undefined,
           showTeamSidebar: boolean,
         ]
       | [
