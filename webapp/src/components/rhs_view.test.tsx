@@ -352,6 +352,46 @@ describe("RHSView", () => {
     await cleanup(newest.root, newest.container);
   });
 
+  it("groups active and history events only when both groups exist", async () => {
+    const active = { ...makeEvent("active"), status: "open" as const };
+    const history = { ...makeEvent("history"), status: "success" as const };
+    const both = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events: [history, active],
+          total: 2,
+          timelineOrder: "newest_first",
+        }),
+      }),
+    );
+
+    expect(
+      Array.from(
+        both.container.querySelectorAll(".event-feed-section-heading"),
+      ).map((element) => element.textContent),
+    ).toEqual(["Active", "History"]);
+    expect(eventTitles(both.container)).toEqual([
+      "event active",
+      "event history",
+    ]);
+    await cleanup(both.root, both.container);
+
+    const onlyHistory = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events: [history],
+          total: 1,
+          timelineOrder: "newest_first",
+        }),
+      }),
+    );
+    expect(
+      onlyHistory.container.querySelector(".event-feed-section-heading"),
+    ).toBeNull();
+    expect(eventTitles(onlyHistory.container)).toEqual(["event history"]);
+    await cleanup(onlyHistory.root, onlyHistory.container);
+  });
+
   it("threads timestamp display preferences into timeline entries", async () => {
     const state = makeState({
       pluginState: makePluginState({
@@ -651,6 +691,70 @@ describe("RHSView", () => {
       "Event Feed: failed to mark events read",
       expect.any(Error),
     );
+
+    await cleanup(root, container);
+  });
+
+  it("marks only rendered unread event IDs after grouping", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      if (String(input).endsWith("/api/v1/events/read")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ version: 1 }),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ events: [], total: 0 }),
+      } as Response);
+    });
+    const visibleActive = {
+      ...makeEvent("visible-active"),
+      status: "open" as const,
+    };
+    const visibleHistory = {
+      ...makeEvent("visible-history"),
+      status: "success" as const,
+    };
+
+    const { actions, container, root } = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events: [visibleHistory, visibleActive],
+          total: 2,
+          viewTeamId: "team-1",
+          viewChannelId: "channel-1",
+          unreadEventIdsByContext: {
+            "team-1:channel-1": [
+              "hidden-by-filter",
+              "visible-active",
+              "visible-history",
+            ],
+          },
+        }),
+      }),
+    );
+    await flushEffects();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/plugins/${manifest.id}/api/v1/events/read`,
+      expect.objectContaining({
+        body: JSON.stringify({
+          team_id: "team-1",
+          channel_id: "channel-1",
+          event_ids: ["visible-active", "visible-history"],
+        }),
+      }),
+    );
+    expect(actions).toContainEqual({
+      type: MARK_EVENTS_READ,
+      teamId: "team-1",
+      eventIds: ["visible-active", "visible-history"],
+    });
+    expect(eventTitles(container)).toEqual([
+      "event visible-active",
+      "event visible-history",
+    ]);
 
     await cleanup(root, container);
   });
