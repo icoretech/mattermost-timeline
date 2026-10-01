@@ -90,6 +90,26 @@ describe("formatTimestamp", () => {
 });
 
 describe("renderMarkdown", () => {
+  it("renders links with control characters as text", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(
+        React.Fragment,
+        null,
+        ...renderMarkdown("[unsafe](java\nscript:alert(1))"),
+      ),
+    );
+    expect(html).not.toContain("<a");
+    const event = queryStaticTimelineEntry({
+      id: "sample-event",
+      team_id: "sample-team",
+      timestamp: 1,
+      title: "Sample event",
+      event_type: "info",
+      links: [{ label: "Unsafe", url: "java\tscript:alert(1)" }],
+    });
+    expect(event.querySelector("a")).toBeNull();
+    expect(event.textContent).toContain("Unsafe");
+  });
   it("returns plain text unchanged", () => {
     const result = renderMarkdown("hello world");
     expect(result).toEqual(["hello world"]);

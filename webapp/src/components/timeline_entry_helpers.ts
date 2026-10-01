@@ -80,6 +80,7 @@ export function formatTimestampTooltip(
 }
 
 export function isSafeUrl(url: string): boolean {
+  if (/\p{Cc}/u.test(url)) return false;
   const trimmedUrl = url.trim();
   const schemeMatch = trimmedUrl.match(/^([a-zA-Z][a-zA-Z\d+\-.]*:)/);
 
