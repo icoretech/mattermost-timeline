@@ -204,7 +204,10 @@ describe("WebhookTokensSetting", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+      {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal: expect.any(AbortSignal),
+      },
     );
     expect(tokenInput(container, "Token 1 name").value).toBe("deploy-bot");
     expect(tokenInput(container, "Token 1 secret").value).toBe("");
@@ -302,6 +305,45 @@ describe("WebhookTokensSetting", () => {
       "town-square\ndeployments\nalerts",
     );
 
+    await cleanup(root, container);
+  });
+
+  it("saves once for repeated clicks and allows retry after a failed save", async () => {
+    const pendingSave = Promise.withResolvers<Response>();
+    globalThis.fetch = vi.fn().mockReturnValueOnce(pendingSave.promise);
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        { name: "sample-token", secret: "sample-secret" },
+      ]),
+    });
+    await act(async () => {
+      changeInputValue(tokenInput(container, "Token 1 name"), "renamed-token");
+      await flushAsyncUpdates();
+    });
+    const button = tokenButton(container, "Save tokens");
+    await act(async () => {
+      button.click();
+      button.click();
+      await flushAsyncUpdates();
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      pendingSave.resolve(mockTextResponse(false, "temporary failure"));
+      await flushAsyncUpdates();
+    });
+    expect(button.disabled).toBe(false);
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      mockWebhookConfigResponse([
+        { name: "renamed-token", enabled: true, require_signature: false },
+      ]),
+    );
+    await act(async () => {
+      button.click();
+      await flushAsyncUpdates();
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Tokens saved");
     await cleanup(root, container);
   });
 
@@ -447,6 +489,8 @@ describe("WebhookTokensSetting", () => {
 
     expect(container.textContent).toContain("Loading token credentials...");
     expect(tokenButton(container, "Add token").disabled).toBe(true);
+    const signal = vi.mocked(globalThis.fetch).mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
 
     await act(async () => {
       root.render(
@@ -465,6 +509,7 @@ describe("WebhookTokensSetting", () => {
       await flushAsyncUpdates();
     });
 
+    expect(signal?.aborted).toBe(true);
     expect(tokenInput(container, "Token 1 name").value).toBe(
       "replacement-token",
     );
@@ -530,7 +575,10 @@ describe("AdminSettings", () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+      {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal: expect.any(AbortSignal),
+      },
     );
     expect(container.querySelector("dt")?.textContent).toBe(
       "Shared secret Legacy",
@@ -677,6 +725,56 @@ describe("AdminSettings", () => {
       "Created Mattermost Timeline test event (event-1)",
     );
 
+    await cleanup(root, container);
+  });
+
+  it("cancels a pending configuration request when the tools unmount", async () => {
+    const pendingLoad = Promise.withResolvers<Response>();
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(pendingLoad.promise);
+    const { container, root } = await renderAdminSettings();
+    const signal = vi.mocked(globalThis.fetch).mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    await cleanup(root, container);
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      pendingLoad.resolve(mockWebhookConfigResponse());
+      await flushAsyncUpdates();
+    });
+    expect(container.childElementCount).toBe(0);
+  });
+
+  it("sends one event for repeated clicks and allows retry after a failed request", async () => {
+    const { container, root } = await renderAdminSettings();
+    const pendingSend = Promise.withResolvers<Response>();
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(pendingSend.promise);
+    const button = tokenButton(container, "Send test event");
+    await act(async () => {
+      button.click();
+      button.click();
+      await flushAsyncUpdates();
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      pendingSend.resolve(mockTextResponse(false, "temporary failure"));
+      await flushAsyncUpdates();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "temporary failure",
+    );
+    expect(button.disabled).toBe(false);
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "retried-event", title: "Test event" }),
+    } as Response);
+    await act(async () => {
+      button.click();
+      await flushAsyncUpdates();
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Created Test event (retried-event)",
+    );
     await cleanup(root, container);
   });
 

@@ -1,26 +1,11 @@
-import React, { useEffect, useMemo, useReducer, useState } from "react";
-import manifest from "../manifest";
-
-type SanitizedWebhookToken = {
-  name: string;
-  enabled: boolean;
-  team?: string;
-  channels?: string[];
-  require_signature: boolean;
-};
-
-type WebhookConfigResponse = {
-  legacy_secret_configured: boolean;
-  require_signed_webhooks: boolean;
-  tokens: SanitizedWebhookToken[];
-  webhook_path: string;
-  batch_webhook_path: string;
-};
-
-type TestEventResponse = {
-  id: string;
-  title: string;
-};
+import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  createTimelineTestEvent,
+  fetchWebhookConfig,
+  type SanitizedWebhookToken,
+  updateWebhookTokens,
+  type WebhookConfigResponse,
+} from "./admin_client";
 
 type WebhookTokenValue = {
   rowId: string;
@@ -36,11 +21,6 @@ type WebhookTokensSettingProps = {
   value?: unknown;
   disabled?: boolean;
 };
-
-async function readResponseText(response: Response) {
-  const text = await response.text();
-  return text.trim() || `HTTP ${response.status}`;
-}
 
 function isTokenRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -424,15 +404,10 @@ function WebhookRequestHelp() {
   );
 }
 
-function WebhookTokensEditor({
-  initialTokens,
-  parseError,
-  disabled,
-}: {
-  initialTokens: WebhookTokenValue[];
-  parseError: string;
-  disabled: boolean;
-}) {
+function useWebhookTokenEditor(
+  initialTokens: WebhookTokenValue[],
+  parseError: string,
+) {
   const shouldLoadTokens = !parseError && initialTokens.length === 0;
   const [state, dispatch] = useReducer(tokenEditorReducer, {
     tokens: initialTokens,
@@ -442,67 +417,42 @@ function WebhookTokensEditor({
     saveError: "",
     saveMessage: "",
   });
-  const { tokens, dirty, loadError, saveError, saveMessage } = state;
-  const isLoading = state.request === "loading";
-  const isSaving = state.request === "saving";
 
   useEffect(() => {
     if (!shouldLoadTokens) return;
-    let cancelled = false;
+    const controller = new AbortController();
 
-    async function loadTokens() {
-      try {
-        const response = await fetch(
-          `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
-          { headers: { "X-Requested-With": "XMLHttpRequest" } },
-        );
-        if (!response.ok) {
-          throw new Error(await readResponseText(response));
-        }
-        const data = (await response.json()) as WebhookConfigResponse;
-        if (!cancelled) {
-          dispatch({
-            type: "loaded",
-            tokens: tokenRowsFromSanitized(data.tokens),
-          });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          dispatch({
-            type: "loadFailed",
-            error: messageFromError(
-              error,
-              "Failed to load webhook token credentials",
-            ),
-          });
-        }
-      }
-    }
-
-    void loadTokens();
+    void fetchWebhookConfig(controller.signal).then(
+      (data) => {
+        if (controller.signal.aborted) return;
+        dispatch({
+          type: "loaded",
+          tokens: tokenRowsFromSanitized(data.tokens),
+        });
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        dispatch({
+          type: "loadFailed",
+          error: messageFromError(
+            error,
+            "Failed to load webhook token credentials",
+          ),
+        });
+      },
+    );
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [shouldLoadTokens]);
 
+  const savingRef = useRef(false);
   const saveTokens = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     dispatch({ type: "saveStarted" });
     try {
-      const response = await fetch(
-        `/plugins/${manifest.id}/api/v1/admin/webhook-tokens`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          body: JSON.stringify({ tokens: tokensForRequest(tokens) }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(await readResponseText(response));
-      }
-      const data = (await response.json()) as WebhookConfigResponse;
+      const data = await updateWebhookTokens(tokensForRequest(state.tokens));
       dispatch({ type: "saved", tokens: tokenRowsFromSanitized(data.tokens) });
     } catch (error) {
       dispatch({
@@ -512,12 +462,93 @@ function WebhookTokensEditor({
           "Failed to save webhook token credentials",
         ),
       });
+    } finally {
+      savingRef.current = false;
     }
   };
 
+  return { state, dispatch, saveTokens };
+}
+
+function TokenEditorActions({
+  dirty,
+  isSaving,
+  saveMessage,
+  controlsDisabled,
+  onAdd,
+  onSave,
+}: {
+  dirty: boolean;
+  isSaving: boolean;
+  saveMessage: string;
+  controlsDisabled: boolean;
+  onAdd: () => void;
+  onSave: () => void;
+}) {
+  const canSave = dirty && !controlsDisabled;
+  return (
+    <div className="timeline-token-settings__actions">
+      <button
+        className="timeline-token-settings__button"
+        type="button"
+        disabled={controlsDisabled}
+        onClick={onAdd}
+      >
+        {"Add token"}
+      </button>
+      <button
+        className="timeline-token-settings__button timeline-token-settings__button--primary"
+        type="button"
+        disabled={!canSave}
+        onClick={onSave}
+      >
+        {isSaving ? "Saving..." : "Save tokens"}
+      </button>
+      {dirty && !isSaving && !saveMessage && (
+        <span className="timeline-token-settings__note" role="status">
+          {"Unsaved token changes"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TokenEditorMessage({
+  kind,
+  message,
+}: {
+  kind: "error" | "message";
+  message: string;
+}) {
+  if (!message) return null;
+  return (
+    <div
+      className={`timeline-token-settings__${kind}`}
+      role={kind === "error" ? "alert" : "status"}
+    >
+      {message}
+    </div>
+  );
+}
+
+function WebhookTokensEditor({
+  initialTokens,
+  parseError,
+  disabled,
+}: {
+  initialTokens: WebhookTokenValue[];
+  parseError: string;
+  disabled: boolean;
+}) {
+  const { state, dispatch, saveTokens } = useWebhookTokenEditor(
+    initialTokens,
+    parseError,
+  );
+  const { tokens, dirty, loadError, saveError, saveMessage } = state;
+  const isLoading = state.request === "loading";
+  const isSaving = state.request === "saving";
   const controlsDisabled =
     disabled || Boolean(parseError) || isLoading || isSaving;
-  const canSave = dirty && !controlsDisabled;
 
   return (
     <div className="timeline-token-settings">
@@ -526,21 +557,11 @@ function WebhookTokensEditor({
           "Create one token per integration. Give it a name and secret, then choose which teams and channels it can publish to."
         }
       </p>
-      {isLoading && (
-        <div className="timeline-token-settings__message" role="status">
-          {"Loading token credentials..."}
-        </div>
-      )}
-      {parseError && (
-        <div className="timeline-token-settings__error" role="alert">
-          {parseError}
-        </div>
-      )}
-      {loadError && (
-        <div className="timeline-token-settings__error" role="alert">
-          {loadError}
-        </div>
-      )}
+      <TokenEditorMessage
+        kind="message"
+        message={isLoading ? "Loading token credentials..." : ""}
+      />
+      <TokenEditorMessage kind="error" message={parseError || loadError} />
       <div className="timeline-token-settings__rows">
         {tokens.map((token, index) => (
           <WebhookTokenRow
@@ -560,84 +581,51 @@ function WebhookTokensEditor({
           {"No tokens yet. Select Add token to connect your first integration."}
         </div>
       )}
-      <div className="timeline-token-settings__actions">
-        <button
-          className="timeline-token-settings__button"
-          type="button"
-          disabled={controlsDisabled}
-          onClick={() => dispatch({ type: "add", token: emptyToken() })}
-        >
-          {"Add token"}
-        </button>
-        <button
-          className="timeline-token-settings__button timeline-token-settings__button--primary"
-          type="button"
-          disabled={!canSave}
-          onClick={saveTokens}
-        >
-          {isSaving ? "Saving..." : "Save tokens"}
-        </button>
-        {dirty && !isSaving && !saveMessage && (
-          <span className="timeline-token-settings__note" role="status">
-            {"Unsaved token changes"}
-          </span>
-        )}
-      </div>
-      {saveMessage && (
-        <div className="timeline-token-settings__message" role="status">
-          {saveMessage}
-        </div>
-      )}
-      {saveError && (
-        <div className="timeline-token-settings__error" role="alert">
-          {saveError}
-        </div>
-      )}
+      <TokenEditorActions
+        dirty={dirty}
+        isSaving={isSaving}
+        saveMessage={saveMessage}
+        controlsDisabled={controlsDisabled}
+        onAdd={() => dispatch({ type: "add", token: emptyToken() })}
+        onSave={saveTokens}
+      />
+      <TokenEditorMessage kind="message" message={saveMessage} />
+      <TokenEditorMessage kind="error" message={saveError} />
       <WebhookRequestHelp />
     </div>
   );
 }
 
 export default function AdminSettings() {
-  const [config, setConfig] = useState<WebhookConfigResponse | null>(null);
+  const [loadState, setLoadState] = useState<
+    | { kind: "loading" }
+    | { kind: "ready"; config: WebhookConfigResponse }
+    | { kind: "failed" }
+  >({ kind: "loading" });
+  const config = loadState.kind === "ready" ? loadState.config : null;
   const [teamId, setTeamId] = useState("");
   const [channelId, setChannelId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadConfig() {
-      setIsLoading(true);
-      setError("");
-      try {
-        const response = await fetch(
-          `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
-          { headers: { "X-Requested-With": "XMLHttpRequest" } },
-        );
-        if (!response.ok) {
-          throw new Error(await readResponseText(response));
-        }
-        const data = (await response.json()) as WebhookConfigResponse;
-        if (!cancelled) setConfig(data);
-      } catch (loadError) {
-        if (!cancelled) {
+    const controller = new AbortController();
+    void fetchWebhookConfig(controller.signal).then(
+      (config) => {
+        if (!controller.signal.aborted) setLoadState({ kind: "ready", config });
+      },
+      (loadError: unknown) => {
+        if (!controller.signal.aborted) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Failed to load webhook configuration",
+            messageFromError(loadError, "Failed to load webhook configuration"),
           );
+          setLoadState({ kind: "failed" });
         }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-    void loadConfig();
-    return () => {
-      cancelled = true;
-    };
+      },
+    );
+    return () => controller.abort();
   }, []);
 
   const copyPath = async (path: string) => {
@@ -654,28 +642,13 @@ export default function AdminSettings() {
   };
 
   const sendTestEvent = async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setError("");
     setMessage("");
     setIsSending(true);
     try {
-      const response = await fetch(
-        `/plugins/${manifest.id}/api/v1/admin/test-event`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          body: JSON.stringify({
-            team_id: teamId,
-            channel_id: channelId || undefined,
-          }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(await readResponseText(response));
-      }
-      const event = (await response.json()) as TestEventResponse;
+      const event = await createTimelineTestEvent(teamId, channelId);
       setMessage(`Created ${event.title} (${event.id})`);
     } catch (sendError) {
       setError(
@@ -684,11 +657,12 @@ export default function AdminSettings() {
           : "Failed to send test event",
       );
     } finally {
+      sendingRef.current = false;
       setIsSending(false);
     }
   };
 
-  if (isLoading) {
+  if (loadState.kind === "loading") {
     return (
       <div className="timeline-admin-settings" role="status">
         {"Loading webhook tools..."}
