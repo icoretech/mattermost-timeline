@@ -11,6 +11,19 @@ func (s *EventStore) GetGlobalEvents(teamID string, offset, limit int) ([]Event,
 	return s.loadEventsFromIndex(globalIndexKey(teamID), offset, limit)
 }
 
+// GetAllGlobalEvents returns all team-wide events from the global index.
+func (s *EventStore) GetAllGlobalEvents(teamID string) ([]Event, error) {
+	ids, err := s.loadIndexIDs(globalIndexKey(teamID), "global index")
+	if err != nil {
+		return nil, err
+	}
+	loaded, err := s.loadEventsByID(ids)
+	if err != nil {
+		return nil, err
+	}
+	return eventsFromLoaded(loaded), nil
+}
+
 // GetEventsByChannel returns events for a specific channel merged with team-wide events.
 func (s *EventStore) GetEventsByChannel(teamID, channelID string, offset, limit int) ([]Event, int, error) {
 	if err := validatePagination(offset, limit); err != nil {
@@ -34,6 +47,23 @@ func (s *EventStore) GetEventsByChannel(teamID, channelID string, offset, limit 
 	total := len(events)
 
 	return paginateEvents(events, total, offset, limit), total, nil
+}
+
+// GetAllEventsByChannel returns all events visible in a channel merged with team-wide events.
+func (s *EventStore) GetAllEventsByChannel(teamID, channelID string) ([]Event, error) {
+	channelIDs, err := s.loadIndexIDs(channelIndexKey(teamID, channelID), "channel index")
+	if err != nil {
+		return nil, err
+	}
+	globalIDs, err := s.loadIndexIDs(globalIndexKey(teamID), "global index")
+	if err != nil {
+		return nil, err
+	}
+	loaded, err := s.loadEventsByID(mergeUniqueIDs(channelIDs, globalIDs))
+	if err != nil {
+		return nil, err
+	}
+	return sortEventsByTimestampDesc(loaded), nil
 }
 
 func validatePagination(offset, limit int) error {

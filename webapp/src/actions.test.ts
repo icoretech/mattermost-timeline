@@ -23,6 +23,7 @@ import {
   SET_ERROR,
   SET_LOADING,
 } from "./actions";
+import { isEventEntry } from "./timeline_validation";
 
 describe("action creators", () => {
   it("receivedNewEvent creates correct action", () => {
@@ -266,6 +267,52 @@ describe("reaction mutation thunks", () => {
   });
 });
 
+describe("timeline event validation", () => {
+  const minimalEvent = {
+    id: "e1",
+    team_id: "t1",
+    timestamp: 1000,
+    title: "Minimal",
+    event_type: "info",
+  };
+
+  it("accepts the legacy minimal event shape", () => {
+    expect(isEventEntry(minimalEvent)).toBe(true);
+  });
+
+  it("accepts events with every optional metadata field", () => {
+    expect(
+      isEventEntry({
+        ...minimalEvent,
+        message: "Deploy started",
+        link: "https://example.com/deploy",
+        links: [{ url: "https://example.com/logs", label: "logs" }],
+        source: "github-actions",
+        external_id: "deploy-123",
+        severity: "critical",
+        status: "running",
+        environment: "staging",
+        expires_at: 2000,
+        pinned: true,
+        resolved_at: 3000,
+        channels: ["town-square"],
+        client_reactions: {
+          eyes: { count: 1, self: false, recent_users: ["user-1"] },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["unknown severity", { severity: "urgent" }],
+    ["unknown status", { status: "queued" }],
+    ["non-numeric expires_at", { expires_at: "tomorrow" }],
+    ["non-finite resolved_at", { resolved_at: Number.NaN }],
+  ])("rejects events with %s metadata", (_name, metadata) => {
+    expect(isEventEntry({ ...minimalEvent, ...metadata })).toBe(false);
+  });
+});
+
 describe("fetchEvents", () => {
   const mockDispatch = vi.fn();
 
@@ -308,6 +355,62 @@ describe("fetchEvents", () => {
       (c: unknown[]) => (c[0] as { type: string }).type === RECEIVED_EVENTS,
     );
     expect(receivedAction?.[0]).toMatchObject({ unreadEventIds: [] });
+  });
+
+  it("keeps the no-filter events URL compatible", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ events: [], total: 0 }),
+    } as Response);
+
+    await fetchEvents("t1")(mockDispatch);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/plugins/ch.icorete.mattermost-timeline/api/v1/events?team_id=t1&offset=0&limit=50",
+      expect.objectContaining({
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      }),
+    );
+  });
+
+  it("serializes event fetch filters into query parameters", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ events: [], total: 0 }),
+    } as Response);
+
+    await fetchEvents("t1", {
+      channelId: "c1",
+      filters: {
+        q: "deploy failed",
+        eventType: "deploy",
+        source: "github-actions",
+        severity: "critical",
+        status: "open",
+        environment: "staging",
+        pinned: true,
+        active: true,
+        unread: true,
+      },
+    })(mockDispatch);
+
+    const url = new URL(
+      String(vi.mocked(globalThis.fetch).mock.calls[0][0]),
+      "https://mattermost.example.com",
+    );
+    expect(url.searchParams.get("team_id")).toBe("t1");
+    expect(url.searchParams.get("offset")).toBe("0");
+    expect(url.searchParams.get("limit")).toBe("50");
+    expect(url.searchParams.get("channel_id")).toBe("c1");
+    expect(url.searchParams.get("q")).toBe("deploy failed");
+    expect(url.searchParams.get("event_type")).toBe("deploy");
+    expect(url.searchParams.get("source")).toBe("github-actions");
+    expect(url.searchParams.get("severity")).toBe("critical");
+    expect(url.searchParams.get("status")).toBe("open");
+    expect(url.searchParams.get("environment")).toBe("staging");
+    expect(url.searchParams.get("pinned")).toBe("true");
+    expect(url.searchParams.get("active")).toBe("true");
+    expect(url.searchParams.get("unread")).toBe("true");
   });
 
   it("dispatches error on fetch failure", async () => {

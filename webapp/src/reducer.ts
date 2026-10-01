@@ -103,6 +103,7 @@ function events(
     }
     case RECEIVED_REACTION_UPDATED: {
       const { eventId, icon, count, userIds } = action;
+      const userIdSet = new Set(userIds);
       return state.map((ev) => {
         if (ev.id !== eventId || !icon) return ev;
         const reactions = { ...(ev.client_reactions || {}) };
@@ -112,7 +113,7 @@ function events(
           const recentCount = Math.min(userIds.length, 3);
           reactions[icon] = {
             count,
-            self: userIds.includes(action.currentUserId ?? ""),
+            self: userIdSet.has(action.currentUserId ?? ""),
             recent_users: userIds.slice(-recentCount),
           };
         }

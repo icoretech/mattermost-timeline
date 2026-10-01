@@ -1032,6 +1032,72 @@ func TestReadStateMutationRetriesCompareAndSetConflict(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestFilterEventsMatchesMetadataActivityQueryAndUnread(t *testing.T) {
+	now := int64(1_700_000_000_000)
+	events := []Event{
+		{ID: "evt-active", Title: "CPU alert", Message: "payment API", Source: "pager", ExternalID: "inc-1", EventType: "alert", Severity: "critical", Status: "open", Environment: "prod", Timestamp: 400, Links: []EventLink{{URL: "https://runbook.example.com/cpu", Label: "Runbook"}}},
+		{ID: "evt-pinned", Title: "Pinned maintenance", EventType: "maintenance", Severity: "info", Status: "success", Environment: "prod", Timestamp: 300, Pinned: true, ExpiresAt: now - 1},
+		{ID: "evt-history", Title: "Deploy done", EventType: "deploy", Severity: "warning", Status: "resolved", Environment: "staging", Timestamp: 200},
+		{ID: "evt-running", Title: "Migration", EventType: "job", Severity: "info", Status: "running", Environment: "prod", Timestamp: 100},
+	}
+	unreadIDs := map[string]struct{}{"evt-active": {}, "evt-running": {}}
+
+	tests := []struct {
+		name    string
+		filters EventFilterOptions
+		wantIDs []string
+	}{
+		{name: "query matches link label", filters: EventFilterOptions{Query: "runbook", Now: now}, wantIDs: []string{"evt-active"}},
+		{name: "severity matches case-insensitively", filters: EventFilterOptions{Severity: "CRITICAL", Now: now}, wantIDs: []string{"evt-active"}},
+		{name: "status matches exact value", filters: EventFilterOptions{Status: "running", Now: now}, wantIDs: []string{"evt-running"}},
+		{name: "environment matches", filters: EventFilterOptions{Environment: "staging", Now: now}, wantIDs: []string{"evt-history"}},
+		{name: "pinned true", filters: EventFilterOptions{Pinned: boolPtr(true), Now: now}, wantIDs: []string{"evt-pinned"}},
+		{name: "active includes critical open pinned and running", filters: EventFilterOptions{Active: boolPtr(true), Now: now}, wantIDs: []string{"evt-active", "evt-pinned", "evt-running"}},
+		{name: "unread only", filters: EventFilterOptions{Unread: boolPtr(true), Now: now}, wantIDs: []string{"evt-active", "evt-running"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered := filterEvents(events, tt.filters, unreadIDs)
+			ids := make([]string, 0, len(filtered))
+			for _, event := range filtered {
+				ids = append(ids, event.ID)
+			}
+			assert.Equal(t, tt.wantIDs, ids)
+		})
+	}
+}
+
+func TestGetAllEventsByChannelPreservesNewestFirstGlobalChannelMerge(t *testing.T) {
+	api := &plugintest.API{}
+	store := NewEventStore(api, 100)
+
+	channelIndex, _ := json.Marshal([]string{"evt-channel-old", "evt-channel-new"})
+	globalIndex, _ := json.Marshal([]string{"evt-global-new", "evt-channel-old"})
+	api.On("KVGet", channelIndexKey("team-1", "channel-1")).Return(channelIndex, (*model.AppError)(nil))
+	api.On("KVGet", globalIndexKey("team-1")).Return(globalIndex, (*model.AppError)(nil))
+
+	events := []Event{
+		{ID: "evt-channel-old", TeamID: "team-1", Timestamp: 100, Channels: []string{"channel-1"}},
+		{ID: "evt-channel-new", TeamID: "team-1", Timestamp: 300, Channels: []string{"channel-1"}},
+		{ID: "evt-global-new", TeamID: "team-1", Timestamp: 400},
+	}
+	for _, event := range events {
+		eventJSON, err := json.Marshal(event)
+		require.NoError(t, err)
+		api.On("KVGet", "event:"+event.ID).Return(eventJSON, (*model.AppError)(nil))
+	}
+
+	visible, err := store.GetAllEventsByChannel("team-1", "channel-1")
+
+	require.NoError(t, err)
+	require.Len(t, visible, 3)
+	assert.Equal(t, "evt-global-new", visible[0].ID)
+	assert.Equal(t, "evt-channel-new", visible[1].ID)
+	assert.Equal(t, "evt-channel-old", visible[2].ID)
+	api.AssertExpectations(t)
+}
+
 func mustMarshalReadState(t *testing.T, state TimelineReadState) []byte {
 	t.Helper()
 	data, err := json.Marshal(state)

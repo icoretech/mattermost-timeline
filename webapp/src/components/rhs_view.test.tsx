@@ -38,6 +38,29 @@ function makeEvent(id: string): EventEntry {
   };
 }
 
+function eventTitles(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll(".timeline-entry__title")).map(
+    (element) => element.textContent || "",
+  );
+}
+
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function changeInputValue(input: HTMLInputElement | null, value: string) {
+  if (!input) return;
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function makePluginState(
   overrides: Partial<EventFeedState> = {},
 ): EventFeedState {
@@ -158,6 +181,7 @@ describe("RHSView", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
+    window.WebappUtils = undefined;
   });
 
   it("performs an initial channel-scoped fetch", async () => {
@@ -174,6 +198,158 @@ describe("RHSView", () => {
     );
 
     await cleanup(root, container);
+  });
+
+  it("renders the compact search toolbar with filters collapsed", async () => {
+    const { container, root } = await renderRHS(
+      makeState({
+        pluginState: makePluginState({ events: [makeEvent("e1")] }),
+      }),
+    );
+
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search timeline events"]',
+    );
+    const toggle = container.querySelector<HTMLButtonElement>(
+      ".event-feed-filter-toggle",
+    );
+
+    expect(search?.placeholder).toBe("Search timeline");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.getAttribute("aria-controls")).toBe(
+      "event-feed-filter-panel",
+    );
+    expect(container.querySelector("#event-feed-filter-panel")).toBeNull();
+    expect(eventTitles(container)).toEqual(["event e1"]);
+
+    await cleanup(root, container);
+  });
+
+  it("exposes keyboard-focusable filter controls when expanded", async () => {
+    const { container, root } = await renderRHS(makeState());
+    const toggle = container.querySelector<HTMLButtonElement>(
+      ".event-feed-filter-toggle",
+    );
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    const controls = Array.from(
+      container.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+      >(
+        "#event-feed-filter-panel input, #event-feed-filter-panel select, #event-feed-filter-panel button",
+      ),
+    );
+    expect(controls).toHaveLength(8);
+    expect(
+      controls.map(
+        (control) => control.getAttribute("id") || control.textContent,
+      ),
+    ).toEqual([
+      "event-type-filter",
+      "source-filter",
+      "environment-filter",
+      "severity-filter",
+      "status-filter",
+      "Pinned",
+      "Active",
+      "Unread",
+    ]);
+    for (const control of controls) {
+      expect(control.tabIndex).toBeGreaterThanOrEqual(0);
+      expect(control.disabled).toBe(false);
+    }
+
+    await cleanup(root, container);
+  });
+
+  it("clears stale events and refetches offset zero when filters change", async () => {
+    const { actions, container, root } = await renderRHS(
+      makeState({
+        pluginState: makePluginState({ events: [makeEvent("e1")] }),
+      }),
+    );
+    actions.length = 0;
+    vi.mocked(globalThis.fetch).mockClear();
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search timeline events"]',
+    );
+
+    await act(async () => {
+      changeInputValue(search || null, "deploy");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(actions).toContainEqual({ type: CLEAR_EVENTS });
+    const filterURL = String(
+      vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0],
+    );
+    expect(filterURL).toContain("offset=0");
+    expect(filterURL).toContain("q=deploy");
+
+    await cleanup(root, container);
+  });
+
+  it("preserves filters when loading more and keeps order placement", async () => {
+    const events = [makeEvent("e1"), makeEvent("e2")];
+    const oldest = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events,
+          total: 3,
+          timelineOrder: "oldest_first",
+        }),
+      }),
+    );
+    const oldestSearch = oldest.container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search timeline events"]',
+    );
+    expect(
+      oldest.container
+        .querySelector(".event-feed-list")
+        ?.firstElementChild?.classList.contains("event-feed-load-more"),
+    ).toBe(true);
+
+    await act(async () => {
+      changeInputValue(oldestSearch || null, "critical");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const filteredButton = oldest.container.querySelector<HTMLButtonElement>(
+      ".event-feed-load-more",
+    );
+    await act(async () => {
+      filteredButton?.click();
+      await Promise.resolve();
+    });
+
+    const oldestURL = String(
+      vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0],
+    );
+    expect(oldestURL).toContain("offset=2");
+    expect(oldestURL).toContain("q=critical");
+    await cleanup(oldest.root, oldest.container);
+
+    const newest = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events,
+          total: 3,
+          timelineOrder: "newest_first",
+        }),
+      }),
+    );
+    expect(
+      newest.container
+        .querySelector(".event-feed-list")
+        ?.lastElementChild?.classList.contains("event-feed-load-more"),
+    ).toBe(true);
+    await cleanup(newest.root, newest.container);
   });
 
   it("threads timestamp display preferences into timeline entries", async () => {
@@ -475,6 +651,83 @@ describe("RHSView", () => {
       "Event Feed: failed to mark events read",
       expect.any(Error),
     );
+
+    await cleanup(root, container);
+  });
+
+  it("exposes loading, error, and empty state semantics", async () => {
+    const loading = await renderRHS(
+      makeState({ pluginState: makePluginState({ isLoading: true }) }),
+    );
+    expect(
+      loading.container
+        .querySelector(".event-feed-timeline")
+        ?.getAttribute("aria-busy"),
+    ).toBe("true");
+    expect(
+      loading.container
+        .querySelector(".event-feed-loading")
+        ?.getAttribute("role"),
+    ).toBe("status");
+    expect(
+      loading.container
+        .querySelector(".event-feed-loading")
+        ?.getAttribute("aria-live"),
+    ).toBe("polite");
+    await cleanup(loading.root, loading.container);
+
+    const error = await renderRHS(
+      makeState({ pluginState: makePluginState({ error: "Failed" }) }),
+    );
+    expect(
+      error.container.querySelector(".event-feed-error")?.getAttribute("role"),
+    ).toBe("alert");
+    await cleanup(error.root, error.container);
+
+    const empty = await renderRHS(makeState());
+    expect(
+      empty.container.querySelector(".event-feed-empty")?.getAttribute("role"),
+    ).toBe("status");
+    expect(
+      empty.container.querySelector(".event-feed-empty__endpoint")?.textContent,
+    ).toBe("/plugins/ch.icorete.mattermost-timeline/webhook");
+    await cleanup(empty.root, empty.container);
+  });
+
+  it("does not request smooth scrolling when reduced motion is preferred", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get: () => 480,
+    });
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+
+    const { container, root } = await renderRHS(
+      makeState({
+        pluginState: makePluginState({
+          events: [makeEvent("e1")],
+          total: 1,
+          newEventIds: ["e1"],
+        }),
+      }),
+    );
+    await flushEffects();
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(
+      container.querySelector<HTMLDivElement>(".event-feed-list")?.scrollTop,
+    ).toBe(480);
 
     await cleanup(root, container);
   });

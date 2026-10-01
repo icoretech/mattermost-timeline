@@ -154,11 +154,24 @@ export type EventFeedThunk<TReturn = void> = (
   dispatch: EventFeedDispatch,
 ) => Promise<TReturn> | TReturn;
 
+export type EventFetchFilters = {
+  q?: string;
+  eventType?: string;
+  source?: string;
+  severity?: EventEntry["severity"] | "";
+  status?: EventEntry["status"] | "";
+  environment?: string;
+  pinned?: boolean;
+  active?: boolean;
+  unread?: boolean;
+};
+
 type FetchEventsOptions = {
   offset?: number;
   limit?: number;
   channelId?: string;
   signal?: AbortSignal;
+  filters?: EventFetchFilters;
 };
 
 type EventsResponse = {
@@ -289,17 +302,50 @@ async function parseReactionMutationResponse(
   return data;
 }
 
+function buildEventsURL(
+  teamId: string,
+  offset: number,
+  limit: number,
+  channelId?: string,
+  filters: EventFetchFilters = {},
+) {
+  const params = new URLSearchParams({
+    team_id: teamId,
+    offset: String(offset),
+    limit: String(limit),
+  });
+  if (channelId) {
+    params.set("channel_id", channelId);
+  }
+  if (filters.q) params.set("q", filters.q);
+  if (filters.eventType) params.set("event_type", filters.eventType);
+  if (filters.source) params.set("source", filters.source);
+  if (filters.severity) params.set("severity", filters.severity);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.environment) params.set("environment", filters.environment);
+  if (filters.pinned !== undefined)
+    params.set("pinned", String(filters.pinned));
+  if (filters.active !== undefined)
+    params.set("active", String(filters.active));
+  if (filters.unread !== undefined)
+    params.set("unread", String(filters.unread));
+  return `/plugins/${manifest.id}/api/v1/events?${params.toString()}`;
+}
+
 export function fetchEvents(
   teamId: string,
-  { offset = 0, limit = 50, channelId, signal }: FetchEventsOptions = {},
+  {
+    offset = 0,
+    limit = 50,
+    channelId,
+    signal,
+    filters = {},
+  }: FetchEventsOptions = {},
 ): EventFeedThunk {
   return async (dispatch: EventFeedDispatch) => {
     dispatch({ type: SET_LOADING, loading: true });
     try {
-      let url = `/plugins/${manifest.id}/api/v1/events?team_id=${encodeURIComponent(teamId)}&offset=${offset}&limit=${limit}`;
-      if (channelId) {
-        url += `&channel_id=${encodeURIComponent(channelId)}`;
-      }
+      const url = buildEventsURL(teamId, offset, limit, channelId, filters);
       const response = await fetch(url, {
         headers: { "X-Requested-With": "XMLHttpRequest" },
         signal,

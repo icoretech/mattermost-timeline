@@ -373,21 +373,54 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	channelID := r.URL.Query().Get("channel_id")
-	events, total, handlerErr := p.getVisibleEventsForUser(userID, teamID, channelID, offset, limit)
+	now := time.Now().UnixMilli()
+	filters, handlerErr := parseEventFilterOptions(r, now)
 	if handlerErr != nil {
 		http.Error(w, handlerErr.message, handlerErr.status)
 		return
 	}
 
-	baselineTimestamp := maxEventTimestamp(events)
-	if baselineTimestamp == 0 {
-		baselineTimestamp = time.Now().UnixMilli()
-	}
-	unreadEvents, _, err := p.store.GetUnreadEventsForContext(userID, teamID, channelID, events, baselineTimestamp)
-	if err != nil {
-		p.API.LogError("Failed to get read state", "error", err.Error())
-		http.Error(w, "Failed to get events", http.StatusInternalServerError)
-		return
+	var events []Event
+	var total int
+	var unreadEvents []Event
+	if hasEventFilters(filters) {
+		allEvents, handlerErr := p.getAllVisibleEventsForUser(userID, teamID, channelID)
+		if handlerErr != nil {
+			http.Error(w, handlerErr.message, handlerErr.status)
+			return
+		}
+		baselineTimestamp := maxEventTimestamp(allEvents)
+		if baselineTimestamp == 0 {
+			baselineTimestamp = now
+		}
+		allUnreadEvents, _, err := p.store.GetUnreadEventsForContext(userID, teamID, channelID, allEvents, baselineTimestamp)
+		if err != nil {
+			p.API.LogError("Failed to get read state", "error", err.Error())
+			http.Error(w, "Failed to get events", http.StatusInternalServerError)
+			return
+		}
+		unreadIDs := unreadIDSet(allUnreadEvents)
+		filteredEvents := filterEvents(allEvents, filters, unreadIDs)
+		total = len(filteredEvents)
+		events = paginateEvents(filteredEvents, total, offset, limit)
+		unreadEvents = filterEvents(events, EventFilterOptions{Unread: boolPtr(true)}, unreadIDs)
+	} else {
+		events, total, handlerErr = p.getVisibleEventsForUser(userID, teamID, channelID, offset, limit)
+		if handlerErr != nil {
+			http.Error(w, handlerErr.message, handlerErr.status)
+			return
+		}
+		baselineTimestamp := maxEventTimestamp(events)
+		if baselineTimestamp == 0 {
+			baselineTimestamp = now
+		}
+		var err error
+		unreadEvents, _, err = p.store.GetUnreadEventsForContext(userID, teamID, channelID, events, baselineTimestamp)
+		if err != nil {
+			p.API.LogError("Failed to get read state", "error", err.Error())
+			http.Error(w, "Failed to get events", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	resp := EventsResponse{
@@ -481,8 +514,6 @@ func applyWebhookMetadata(event *Event, payload WebhookPayload, now int64) {
 		event.ResolvedAt = *payload.ResolvedAt
 	}
 }
-
-func boolPtr(value bool) *bool { return &value }
 
 func readWebhookBody(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, *webhookHandlerError) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
@@ -623,4 +654,81 @@ func (p *Plugin) writeTimelineEventResponse(w http.ResponseWriter, status int, e
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(responseJSON)
+}
+
+func (p *Plugin) getAllVisibleEventsForUser(userID, teamID, channelID string) ([]Event, *webhookHandlerError) {
+	if _, appErr := p.API.GetTeamMember(teamID, userID); appErr != nil {
+		return nil, &webhookHandlerError{message: "Not a member of this team", status: http.StatusForbidden}
+	}
+
+	if channelID != "" {
+		if _, appErr := p.API.GetChannelMember(channelID, userID); appErr != nil {
+			return nil, &webhookHandlerError{message: "Not a member of this channel", status: http.StatusForbidden}
+		}
+	}
+
+	var events []Event
+	var err error
+	if channelID != "" {
+		events, err = p.store.GetAllEventsByChannel(teamID, channelID)
+	} else {
+		events, err = p.store.GetAllGlobalEvents(teamID)
+	}
+	if err != nil {
+		p.API.LogError("Failed to get events", "error", err.Error())
+		return nil, &webhookHandlerError{message: "Failed to get events", status: http.StatusInternalServerError}
+	}
+	return events, nil
+}
+
+func parseEventFilterOptions(r *http.Request, now int64) (EventFilterOptions, *webhookHandlerError) {
+	query := r.URL.Query()
+	filters := EventFilterOptions{
+		Query:       query.Get("q"),
+		EventType:   query.Get("event_type"),
+		Source:      query.Get("source"),
+		Severity:    strings.TrimSpace(query.Get("severity")),
+		Status:      strings.TrimSpace(query.Get("status")),
+		Environment: query.Get("environment"),
+		Now:         now,
+	}
+	if filters.Severity != "" && !isAllowedStringValue(filters.Severity, allowedSeverities) {
+		return EventFilterOptions{}, &webhookHandlerError{message: "invalid severity filter", status: http.StatusBadRequest}
+	}
+	if filters.Status != "" && !isAllowedStringValue(filters.Status, allowedStatuses) {
+		return EventFilterOptions{}, &webhookHandlerError{message: "invalid status filter", status: http.StatusBadRequest}
+	}
+	var handlerErr *webhookHandlerError
+	filters.Pinned, handlerErr = parseOptionalBoolFilter(query.Get("pinned"), "pinned")
+	if handlerErr != nil {
+		return EventFilterOptions{}, handlerErr
+	}
+	filters.Active, handlerErr = parseOptionalBoolFilter(query.Get("active"), "active")
+	if handlerErr != nil {
+		return EventFilterOptions{}, handlerErr
+	}
+	filters.Unread, handlerErr = parseOptionalBoolFilter(query.Get("unread"), "unread")
+	if handlerErr != nil {
+		return EventFilterOptions{}, handlerErr
+	}
+	return filters, nil
+}
+
+func parseOptionalBoolFilter(rawValue, name string) (*bool, *webhookHandlerError) {
+	if rawValue == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseBool(rawValue)
+	if err != nil {
+		return nil, &webhookHandlerError{message: name + " must be true or false", status: http.StatusBadRequest}
+	}
+	return &value, nil
+}
+
+func unreadIDSet(events []Event) map[string]struct{} {
+	unreadIDs := make(map[string]struct{}, len(events))
+	for _, event := range events {
+		unreadIDs[event.ID] = struct{}{}
+	}
+	return unreadIDs
 }
