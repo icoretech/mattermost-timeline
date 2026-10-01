@@ -1992,3 +1992,65 @@ func TestHandleWebhookBatch_ObjectPayloadContinuesAfterInvalidItem(t *testing.T)
 	assert.Equal(t, "Title is required", resp.Results[1].Error)
 	api.AssertExpectations(t)
 }
+
+func TestHandleUpdateWebhookTokens_PreservesExistingSecretByName(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret: "legacy-secret",
+		WebhookTokens: `[{"name":"ci","secret":"existing-secret","enabled":true,"team":"old-team","channels":["old-channel"],"require_signature":false}]`,
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
+	api.On("SavePluginConfig", mock.MatchedBy(func(saved map[string]interface{}) bool {
+		rawTokens, ok := saved["WebhookTokens"].(string)
+		if !ok {
+			return false
+		}
+		var tokens []webhookTokenConfig
+		require.NoError(t, json.Unmarshal([]byte(rawTokens), &tokens))
+		require.Len(t, tokens, 1)
+		return tokens[0].Name == "ci" &&
+			tokens[0].Secret == "existing-secret" &&
+			tokens[0].Team == "new-team" &&
+			assert.ObjectsAreEqual([]string{"deployments", "alerts"}, tokens[0].Channels) &&
+			tokens[0].RequireSignature
+	})).Return((*model.AppError)(nil)).Once()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/webhook-tokens", strings.NewReader(`{"tokens":[{"name":"ci","secret":"","enabled":true,"team":"new-team","channels":["deployments","alerts"],"require_signature":true}]}`))
+	req.Header.Set("Mattermost-User-ID", "admin-user")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	updatedTokens, err := parseWebhookTokenConfigs(p.getConfiguration().WebhookTokens)
+	require.NoError(t, err)
+	require.Len(t, updatedTokens, 1)
+	assert.Equal(t, "existing-secret", updatedTokens[0].Secret)
+	assert.Equal(t, "new-team", updatedTokens[0].Team)
+	assert.Equal(t, []string{"deployments", "alerts"}, updatedTokens[0].Channels)
+	assert.True(t, updatedTokens[0].RequireSignature)
+	api.AssertExpectations(t)
+}
+
+func TestHandleUpdateWebhookTokens_RequiresSecretForNewEnabledToken(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookTokens: `[]`}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/webhook-tokens", strings.NewReader(`{"tokens":[{"name":"new-ci","secret":"","enabled":true}]}`))
+	req.Header.Set("Mattermost-User-ID", "admin-user")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Webhook token secret is required for enabled token: new-ci")
+	assert.Equal(t, `[]`, p.getConfiguration().WebhookTokens)
+	api.AssertNotCalled(t, "SavePluginConfig", mock.Anything)
+	api.AssertExpectations(t)
+}

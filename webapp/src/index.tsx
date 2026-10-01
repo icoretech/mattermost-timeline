@@ -11,6 +11,9 @@ import {
   setCurrentUserId,
   setViewContext,
 } from "./actions";
+import AdminSettings, {
+  WebhookTokensSetting,
+} from "./components/admin_settings";
 import Icon from "./components/icon";
 import RHSView from "./components/rhs_view";
 import manifest from "./manifest";
@@ -74,6 +77,23 @@ function isMarkPopoutContextReadPayload(
 export default class Plugin {
   public initialize(registry: PluginRegistry, store: Store<GlobalState>) {
     registry.registerReducer(reducer as Reducer);
+    if (registry.registerAdminConsoleCustomSetting) {
+      registry.registerAdminConsoleCustomSetting(
+        "WebhookTools",
+        AdminSettings,
+        {
+          showTitle: true,
+        },
+      );
+
+      registry.registerAdminConsoleCustomSetting(
+        "WebhookTokens",
+        WebhookTokensSetting,
+        {
+          showTitle: true,
+        },
+      );
+    }
 
     const currentUserId = store.getState().entities.users.currentUserId || "";
     if (currentUserId) {

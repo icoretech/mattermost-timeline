@@ -1,0 +1,638 @@
+import React, { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { vi } from "vitest";
+
+import manifest from "../manifest";
+import AdminSettings, { WebhookTokensSetting } from "./admin_settings";
+
+async function renderAdminSettings() {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<AdminSettings />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  return { container, root };
+}
+
+type RenderWebhookTokensSettingOptions = {
+  value?: string;
+  disabled?: boolean;
+};
+
+async function flushAsyncUpdates(times = 4) {
+  for (let index = 0; index < times; index += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function renderWebhookTokensSetting({
+  value = "[]",
+  disabled = false,
+}: RenderWebhookTokensSettingOptions = {}) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<WebhookTokensSetting value={value} disabled={disabled} />);
+    await flushAsyncUpdates();
+  });
+
+  return { container, root };
+}
+
+async function cleanup(root: Root, container: HTMLElement) {
+  await act(async () => {
+    root.unmount();
+  });
+  container.remove();
+}
+
+function changeInputValue(
+  input: HTMLInputElement | HTMLTextAreaElement | null,
+  value: string,
+) {
+  if (!input) return;
+  const prototype =
+    input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function lastFetchBody() {
+  const calls = vi.mocked(globalThis.fetch).mock.calls;
+  const [, init] = calls[calls.length - 1] as [string, RequestInit];
+  return JSON.parse(String(init.body)) as unknown;
+}
+
+function tokenInput(container: HTMLElement, label: string) {
+  const input = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `input[aria-label="${label}"], textarea[aria-label="${label}"]`,
+  );
+  if (!input) throw new Error(`Missing field ${label}`);
+  return input;
+}
+
+function tokenButton(container: HTMLElement, text: string) {
+  const button = Array.from(
+    container.querySelectorAll<HTMLButtonElement>("button"),
+  ).find((candidate) => candidate.textContent === text);
+  if (!button) throw new Error(`Missing button ${text}`);
+  return button;
+}
+
+function mockWebhookConfigResponse(tokens: unknown[] = []) {
+  return {
+    ok: true,
+    json: () =>
+      Promise.resolve({
+        legacy_secret_configured: false,
+        require_signed_webhooks: false,
+        tokens,
+        webhook_path: "/webhook",
+        batch_webhook_path: "/webhook/batch",
+      }),
+  } as Response;
+}
+
+function mockTextResponse(ok: boolean, text: string) {
+  return {
+    ok,
+    text: () => Promise.resolve(text),
+  } as Response;
+}
+
+describe("WebhookTokensSetting", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it("renders non-empty saved token JSON as structured credential fields", async () => {
+    globalThis.fetch = vi.fn();
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        {
+          name: "github-actions",
+          secret: "token-secret",
+          enabled: true,
+          team: "example-org",
+          channels: ["town-square", "deployments"],
+          require_signature: true,
+        },
+      ]),
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Token 1");
+    expect(tokenInput(container, "Token 1 name").value).toBe("github-actions");
+    expect(tokenInput(container, "Token 1 secret").value).toBe("token-secret");
+    expect(tokenInput(container, "Token 1 team").value).toBe("example-org");
+    expect(tokenInput(container, "Token 1 channels").value).toBe(
+      "town-square\ndeployments",
+    );
+    expect(
+      (tokenInput(container, "Token 1 enabled") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (tokenInput(container, "Token 1 require signature") as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+
+    await cleanup(root, container);
+  });
+
+  it("loads sanitized token rows from the admin config API when the saved value is empty", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockWebhookConfigResponse([
+        {
+          name: "deploy-bot",
+          enabled: true,
+          team: "example-org",
+          channels: ["town-square", "deployments"],
+          require_signature: true,
+        },
+      ]),
+    );
+
+    const { container, root } = await renderWebhookTokensSetting({
+      value: "[]",
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+    );
+    expect(tokenInput(container, "Token 1 name").value).toBe("deploy-bot");
+    expect(tokenInput(container, "Token 1 secret").value).toBe("");
+    expect(tokenInput(container, "Token 1 team").value).toBe("example-org");
+    expect(tokenInput(container, "Token 1 channels").value).toBe(
+      "town-square\ndeployments",
+    );
+    expect(
+      (tokenInput(container, "Token 1 require signature") as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+
+    await cleanup(root, container);
+  });
+
+  it("saves added, edited, and removed credentials with normalized PUT JSON", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockWebhookConfigResponse([
+        {
+          name: "deploy-prod",
+          enabled: false,
+          team: "example-org",
+          channels: ["town-square", "deployments", "alerts"],
+          require_signature: true,
+        },
+      ]),
+    );
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        {
+          name: "old-token",
+          secret: "old-secret",
+          enabled: true,
+          team: "old-team",
+          channels: ["old-channel"],
+          require_signature: false,
+        },
+      ]),
+    });
+
+    await act(async () => {
+      tokenButton(container, "Add token").click();
+      await flushAsyncUpdates();
+    });
+
+    await act(async () => {
+      changeInputValue(tokenInput(container, "Token 2 name"), " deploy-prod ");
+      changeInputValue(tokenInput(container, "Token 2 secret"), " new-secret ");
+      changeInputValue(tokenInput(container, "Token 2 team"), " example-org ");
+      changeInputValue(
+        tokenInput(container, "Token 2 channels"),
+        "town-square, deployments\nalerts",
+      );
+      tokenInput(container, "Token 2 enabled").click();
+      tokenInput(container, "Token 2 require signature").click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Remove token 1"]')
+        ?.click();
+      await flushAsyncUpdates();
+    });
+
+    await act(async () => {
+      tokenButton(container, "Save token credentials").click();
+      await flushAsyncUpdates();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/plugins/${manifest.id}/api/v1/admin/webhook-tokens`,
+      expect.objectContaining({
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      }),
+    );
+    expect(lastFetchBody()).toEqual({
+      tokens: [
+        {
+          name: "deploy-prod",
+          secret: "new-secret",
+          enabled: false,
+          team: "example-org",
+          channels: ["town-square", "deployments", "alerts"],
+          require_signature: true,
+        },
+      ],
+    });
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Webhook token credentials saved",
+    );
+    expect(tokenInput(container, "Token 1 name").value).toBe("deploy-prod");
+    expect(tokenInput(container, "Token 1 secret").value).toBe("");
+    expect(tokenInput(container, "Token 1 channels").value).toBe(
+      "town-square\ndeployments\nalerts",
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("renders failed token-save response text as an alert", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(mockTextResponse(false, "duplicate token name"));
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        {
+          name: "deploy",
+          secret: "deploy-secret",
+          enabled: true,
+          channels: [],
+          require_signature: false,
+        },
+      ]),
+    });
+
+    await act(async () => {
+      changeInputValue(tokenInput(container, "Token 1 name"), "deploy-prod");
+      await flushAsyncUpdates();
+    });
+
+    await act(async () => {
+      tokenButton(container, "Save token credentials").click();
+      await flushAsyncUpdates();
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "duplicate token name",
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("shows invalid current JSON and refuses to fetch or save credentials", async () => {
+    globalThis.fetch = vi.fn();
+    const { container, root } = await renderWebhookTokensSetting({
+      value: "{not valid json",
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Invalid Webhook Tokens JSON",
+    );
+
+    await act(async () => {
+      tokenButton(container, "Add token").click();
+      tokenButton(container, "Save token credentials").click();
+      await flushAsyncUpdates();
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    await cleanup(root, container);
+  });
+
+  it("preserves unsaved edits when an equivalent saved value is rendered again", async () => {
+    const savedTokens = [{ name: "sample-token", secret: "sample-secret" }];
+    const value = JSON.stringify(savedTokens);
+    globalThis.fetch = vi.fn();
+    const { container, root } = await renderWebhookTokensSetting({ value });
+    const nameInput = tokenInput(container, "Token 1 name");
+
+    await act(async () => {
+      changeInputValue(nameInput, "edited-token");
+      await flushAsyncUpdates();
+    });
+    await act(async () => {
+      root.render(
+        <WebhookTokensSetting
+          value={JSON.stringify(savedTokens, null, 2)}
+          disabled={true}
+        />,
+      );
+      await flushAsyncUpdates();
+    });
+
+    expect(tokenInput(container, "Token 1 name")).toBe(nameInput);
+    expect(nameInput.value).toBe("edited-token");
+    expect(nameInput.disabled).toBe(true);
+    expect(container.textContent).toContain("Unsaved credential changes");
+
+    await act(async () => {
+      root.render(<WebhookTokensSetting value={value} />);
+      await flushAsyncUpdates();
+    });
+
+    expect(nameInput.disabled).toBe(false);
+    expect(tokenButton(container, "Save token credentials").disabled).toBe(
+      false,
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    await cleanup(root, container);
+  });
+
+  it("resets drafts and save errors when the saved credentials change", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(mockTextResponse(false, "duplicate token name"));
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        { name: "sample-token", secret: "sample-secret" },
+      ]),
+    });
+
+    await act(async () => {
+      changeInputValue(tokenInput(container, "Token 1 name"), "edited-token");
+      await flushAsyncUpdates();
+    });
+    await act(async () => {
+      tokenButton(container, "Save token credentials").click();
+      await flushAsyncUpdates();
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "duplicate token name",
+    );
+
+    await act(async () => {
+      root.render(
+        <WebhookTokensSetting
+          value={JSON.stringify([{ name: "replacement-token" }])}
+        />,
+      );
+      await flushAsyncUpdates();
+    });
+
+    expect(tokenInput(container, "Token 1 name").value).toBe(
+      "replacement-token",
+    );
+    expect(tokenInput(container, "Token 1 secret").value).toBe("");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).not.toContain("Unsaved credential changes");
+    expect(tokenButton(container, "Save token credentials").disabled).toBe(
+      true,
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("ignores an earlier token load after the saved credentials change", async () => {
+    const pendingLoad = Promise.withResolvers<Response>();
+    globalThis.fetch = vi.fn().mockReturnValue(pendingLoad.promise);
+    const { container, root } = await renderWebhookTokensSetting();
+
+    expect(container.textContent).toContain("Loading token credentials...");
+    expect(tokenButton(container, "Add token").disabled).toBe(true);
+
+    await act(async () => {
+      root.render(
+        <WebhookTokensSetting
+          value={JSON.stringify([{ name: "replacement-token" }])}
+        />,
+      );
+      await flushAsyncUpdates();
+    });
+    await act(async () => {
+      pendingLoad.resolve(
+        mockWebhookConfigResponse([
+          { name: "stale-token", enabled: true, require_signature: false },
+        ]),
+      );
+      await flushAsyncUpdates();
+    });
+
+    expect(tokenInput(container, "Token 1 name").value).toBe(
+      "replacement-token",
+    );
+    expect(container.textContent).not.toContain("Loading token credentials...");
+    expect(tokenButton(container, "Add token").disabled).toBe(false);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+    await cleanup(root, container);
+  });
+
+  it("leaves loading state and displays token-load errors", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(mockTextResponse(false, "configuration unavailable"));
+    const { container, root } = await renderWebhookTokensSetting();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "configuration unavailable",
+    );
+    expect(container.textContent).not.toContain("Loading token credentials...");
+    expect(tokenButton(container, "Add token").disabled).toBe(false);
+
+    await cleanup(root, container);
+  });
+});
+
+describe("AdminSettings", () => {
+  beforeEach(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          legacy_secret_configured: true,
+          require_signed_webhooks: true,
+          tokens: [
+            {
+              name: "github-actions",
+              enabled: true,
+              team: "example-org",
+              channels: ["town-square"],
+              require_signature: true,
+            },
+          ],
+          webhook_path:
+            "/plugins/ch.icorete.mattermost-timeline/webhook?team_id=<team-id-or-name>",
+          batch_webhook_path:
+            "/plugins/ch.icorete.mattermost-timeline/webhook/batch?team_id=<team-id-or-name>",
+        }),
+    } as Response);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it("renders sanitized webhook config status without exposing secrets", async () => {
+    const { container, root } = await renderAdminSettings();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `/plugins/${manifest.id}/api/v1/admin/webhook-config`,
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+    );
+    expect(container.querySelector("dt")?.textContent).toBe("Legacy secret");
+    expect(container.textContent).toContain("configured");
+    expect(container.textContent).toContain("Signed webhooks");
+    expect(container.textContent).toContain("required");
+    expect(container.textContent).toContain("Tokens");
+    expect(container.textContent).toContain("1");
+    expect(container.textContent).toContain("github-actions");
+    expect(container.textContent).toContain("signed");
+    expect(container.textContent).not.toContain("replace-with-secret");
+
+    await cleanup(root, container);
+  });
+
+  it("copies webhook paths returned by the server", async () => {
+    const { container, root } = await renderAdminSettings();
+    const [copyWebhook, copyBatch] = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    );
+
+    await act(async () => {
+      copyWebhook.click();
+      await Promise.resolve();
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "/plugins/ch.icorete.mattermost-timeline/webhook?team_id=<team-id-or-name>",
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Webhook path copied",
+    );
+
+    await act(async () => {
+      copyBatch.click();
+      await Promise.resolve();
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "/plugins/ch.icorete.mattermost-timeline/webhook/batch?team_id=<team-id-or-name>",
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("posts test event input and renders the created event", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            legacy_secret_configured: false,
+            require_signed_webhooks: false,
+            tokens: [],
+            webhook_path: "/webhook",
+            batch_webhook_path: "/webhook/batch",
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: "event-1",
+            title: "Mattermost Timeline test event",
+          }),
+      } as Response);
+    const { container, root } = await renderAdminSettings();
+    const [teamInput, channelInput] = Array.from(
+      container.querySelectorAll<HTMLInputElement>("input"),
+    );
+    const sendButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent === "Send test event");
+
+    await act(async () => {
+      changeInputValue(teamInput, "example-org");
+      changeInputValue(channelInput, "town-square");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      sendButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      `/plugins/${manifest.id}/api/v1/admin/test-event`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          team_id: "example-org",
+          channel_id: "town-square",
+        }),
+      }),
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Created Mattermost Timeline test event (event-1)",
+    );
+
+    await cleanup(root, container);
+  });
+
+  it("renders server errors from test-event submission", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            legacy_secret_configured: false,
+            require_signed_webhooks: false,
+            tokens: [],
+            webhook_path: "/webhook",
+            batch_webhook_path: "/webhook/batch",
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve("System admin permission required"),
+      } as Response);
+    const { container, root } = await renderAdminSettings();
+    const sendButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent === "Send test event");
+
+    await act(async () => {
+      sendButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "System admin permission required",
+    );
+
+    await cleanup(root, container);
+  });
+});

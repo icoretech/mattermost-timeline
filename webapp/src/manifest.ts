@@ -42,6 +42,16 @@ const manifest = JSON.parse(
                 "secret": true
             },
             {
+                "key": "WebhookTokens",
+                "display_name": "Webhook Tokens",
+                "type": "custom",
+                "help_text": "Manage named webhook credentials with fields name, secret, enabled, team, channels, and require_signature. Leave a secret blank only when updating an existing token and keeping its stored secret.",
+                "placeholder": "",
+                "default": "[]",
+                "hosting": "",
+                "secret": true
+            },
+            {
                 "key": "RequireSignedWebhooks",
                 "display_name": "Require Signed Webhooks",
                 "type": "bool",
@@ -98,6 +108,16 @@ const manifest = JSON.parse(
                 "help_text": "Allow users to react to timeline events with icon-based reactions.",
                 "placeholder": "",
                 "default": true,
+                "hosting": "",
+                "secret": false
+            },
+            {
+                "key": "WebhookTools",
+                "display_name": "Webhook Tools",
+                "type": "custom",
+                "help_text": "Copy the webhook URL, inspect sanitized webhook configuration, and send a test timeline event.",
+                "placeholder": "",
+                "default": "",
                 "hosting": "",
                 "secret": false
             }

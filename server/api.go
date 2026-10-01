@@ -28,6 +28,9 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter.Use(p.mattermostAuthRequired)
 	apiRouter.HandleFunc("/events", p.handleGetEvents).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/events/read", p.handleMarkEventsRead).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/admin/webhook-config", p.systemAdminRequired(http.HandlerFunc(p.handleGetWebhookConfig)).ServeHTTP).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/admin/test-event", p.systemAdminRequired(http.HandlerFunc(p.handleCreateTestEvent)).ServeHTTP).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/admin/webhook-tokens", p.systemAdminRequired(http.HandlerFunc(p.handleUpdateWebhookTokens)).ServeHTTP).Methods(http.MethodPut)
 	apiRouter.HandleFunc("/events/{eventId}/reactions/{icon}", p.handleAddReaction).Methods(http.MethodPut)
 	apiRouter.HandleFunc("/events/{eventId}/reactions/{icon}", p.handleRemoveReaction).Methods(http.MethodDelete)
 	apiRouter.HandleFunc("/events/{eventId}/reactions/{icon}", p.handleGetReactionUsers).Methods(http.MethodGet)
@@ -731,4 +734,15 @@ func unreadIDSet(events []Event) map[string]struct{} {
 		unreadIDs[event.ID] = struct{}{}
 	}
 	return unreadIDs
+}
+
+func (p *Plugin) systemAdminRequired(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.Header.Get("Mattermost-User-ID")
+		if !p.API.HasPermissionTo(userID, model.PermissionManageSystem) {
+			http.Error(w, "System admin permission required", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
