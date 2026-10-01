@@ -58,6 +58,23 @@ func mustMarshalReadStateForAPI(state TimelineReadState) []byte {
 	return data
 }
 
+func expectWebhookEventCreate(api *plugintest.API, teamID string) {
+	api.On("KVSet", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, "event:")
+	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", globalIndexKey(teamID)).Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", globalIndexKey(teamID), mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("KVGet", retentionIndexKey(teamID)).Return([]byte(nil), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", retentionIndexKey(teamID), mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
+}
+
+func signTimelineWebhook(secret, timestamp, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(timestamp + "." + body))
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
 // --- Webhook endpoint tests ---
 
 func TestHandleWebhook_ValidRequest(t *testing.T) {
@@ -294,6 +311,168 @@ func TestHandleWebhook_WrongSecret(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Invalid webhook secret")
 }
 
+func TestHandleWebhook_SignedRequestCreatesWithoutSharedSecret(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"signed deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	api.On("KVSetWithOptions", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, webhookReplayKeyPrefix)
+	}), []byte{1}, mock.MatchedBy(func(options model.PluginKVSetOptions) bool {
+		return options.Atomic && options.OldValue == nil && options.ExpireInSeconds == int64(webhookSignatureWindow/time.Second)
+	})).Return(true, (*model.AppError)(nil)).Once()
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event ClientEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "signed deploy", event.Title)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsStaleSignedTimestamp(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret"}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"stale","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Add(-webhookSignatureWindow-time.Minute).Unix())
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Webhook signature timestamp outside allowed window")
+	api.AssertNotCalled(t, "KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestHandleWebhook_FutureTimestampReplayProtectionCoversValidityWindow(t *testing.T) {
+	api := &plugintest.API{}
+	p := newTestPlugin(t, api, &configuration{WebhookSecret: "sample-secret"})
+	payload := `{"title":"signed event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Add(4*time.Minute).Unix())
+	api.On("KVSetWithOptions", mock.AnythingOfType("string"), []byte{1}, mock.MatchedBy(func(options model.PluginKVSetOptions) bool {
+		return options.Atomic && options.OldValue == nil && options.ExpireInSeconds >= 539 && options.ExpireInSeconds <= 540
+	})).Return(true, (*model.AppError)(nil)).Once()
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("sample-secret", timestamp, payload))
+	rec := httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_TokenCannotUpdateEventOutsideItsChannelScope(t *testing.T) {
+	api := &plugintest.API{}
+	teamID := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	allowedChannel := "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	otherChannel := "cccccccccccccccccccccccccc"
+	config := &configuration{WebhookTokens: `[{"name":"sample-token","secret":"sample-secret","channels":["bbbbbbbbbbbbbbbbbbbbbbbbbb"]}]`}
+	p := newTestPlugin(t, api, config)
+	existing := Event{ID: "existing-event", TeamID: teamID, Title: "Other channel event", ExternalID: "sample-external-id", Channels: []string{otherChannel}}
+	data, err := json.Marshal(existing)
+	require.NoError(t, err)
+	api.On("GetChannel", allowedChannel).Return(&model.Channel{Id: allowedChannel, TeamId: teamID, Type: model.ChannelTypeOpen}, (*model.AppError)(nil)).Times(3)
+	api.On("KVGet", "ext_id:"+teamID+":sample-external-id").Return([]byte(existing.ID), (*model.AppError)(nil)).Once()
+	api.On("KVGet", eventKey(existing.ID)).Return(data, (*model.AppError)(nil)).Once()
+	payload := `{"title":"Changed event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"sample-external-id","channels":["bbbbbbbbbbbbbbbbbbbbbbbbbb"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "sample-secret")
+	rec := httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	api.AssertNotCalled(t, "KVSet", mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "PublishWebSocketEvent", mock.Anything, mock.Anything, mock.Anything)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsReplayedSignature(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret"}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"replay","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	api.On("KVSetWithOptions", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, webhookReplayKeyPrefix)
+	}), []byte{1}, mock.AnythingOfType("model.PluginKVSetOptions")).Return(false, (*model.AppError)(nil)).Once()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Webhook replay detected")
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RequireSignedWebhooksRejectsUnsignedSecret(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", RequireSignedWebhooks: true}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"unsigned","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Signed webhook required")
+}
+
+func TestHandleWebhook_TokenScopeRestrictions(t *testing.T) {
+	t.Run("team mismatch", func(t *testing.T) {
+		api := &plugintest.API{}
+		cfg := &configuration{WebhookTokens: `[{"name":"ci","secret":"token-secret","team":"allowed-team"}]`}
+		p := newTestPlugin(t, api, cfg)
+
+		api.On("GetTeamByName", "allowed-team").Return(&model.Team{Id: "bbbbbbbbbbbbbbbbbbbbbbbbbb", Name: "allowed-team"}, (*model.AppError)(nil))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+		req.Header.Set("X-Webhook-Secret", "token-secret")
+		rec := httptest.NewRecorder()
+
+		p.router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Webhook token is not allowed for this team")
+		api.AssertExpectations(t)
+	})
+
+	t.Run("channel-restricted token rejects team-wide payload", func(t *testing.T) {
+		api := &plugintest.API{}
+		cfg := &configuration{WebhookTokens: `[{"name":"ci","secret":"token-secret","channels":["town-square"]}]`}
+		p := newTestPlugin(t, api, cfg)
+
+		req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+		req.Header.Set("X-Webhook-Secret", "token-secret")
+		rec := httptest.NewRecorder()
+
+		p.router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Webhook token is not allowed to publish team-wide events")
+		api.AssertExpectations(t)
+	})
+}
+
 func TestHandleWebhook_UnconfiguredSecret(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{WebhookSecret: ""}
@@ -357,6 +536,96 @@ func TestHandleWebhook_InvalidJSON(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Invalid JSON payload")
 }
 
+func TestHandleWebhook_MetadataFieldsRoundTrip(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	payload := `{"title":"incident","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","severity":"critical","status":"open","environment":"staging","expires_at":4102444800000,"pinned":true,"resolved_at":12345}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event ClientEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "critical", event.Severity)
+	assert.Equal(t, "open", event.Status)
+	assert.Equal(t, "staging", event.Environment)
+	assert.Equal(t, int64(4102444800000), event.ExpiresAt)
+	assert.True(t, event.Pinned)
+	assert.Equal(t, int64(12345), event.ResolvedAt)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsInvalidPayloadMetadataAndLinks(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     string
+		wantMessage string
+	}{
+		{
+			name:        "overlong title",
+			payload:     fmt.Sprintf(`{"title":"%s","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`, strings.Repeat("a", maxWebhookTitleLength+1)),
+			wantMessage: "title exceeds maximum length",
+		},
+		{
+			name: "too many links",
+			payload: func() string {
+				links := make([]EventLink, maxWebhookLinkCount+1)
+				for i := range links {
+					links[i] = EventLink{URL: fmt.Sprintf("https://example.com/%d", i)}
+				}
+				body, err := json.Marshal(WebhookPayload{Title: "links", TeamID: "aaaaaaaaaaaaaaaaaaaaaaaaaa", Links: links})
+				require.NoError(t, err)
+				return string(body)
+			}(),
+			wantMessage: "Maximum 10 links per event",
+		},
+		{
+			name:        "unsafe link scheme",
+			payload:     `{"title":"bad link","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","links":[{"url":"javascript:alert(1)","label":"x"}]}`,
+			wantMessage: "Unsupported link URL scheme",
+		},
+		{
+			name:        "invalid severity",
+			payload:     `{"title":"bad severity","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","severity":"urgent"}`,
+			wantMessage: "invalid severity",
+		},
+		{
+			name:        "invalid status",
+			payload:     `{"title":"bad status","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","status":"mystery"}`,
+			wantMessage: "invalid status",
+		},
+		{
+			name:        "negative expires_at",
+			payload:     `{"title":"bad expiry","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","expires_at":-1}`,
+			wantMessage: "expires_at must be non-negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api := &plugintest.API{}
+			cfg := &configuration{WebhookSecret: "s3cret"}
+			p := newTestPlugin(t, api, cfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(tt.payload))
+			req.Header.Set("X-Webhook-Secret", "s3cret")
+			rec := httptest.NewRecorder()
+
+			p.router.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.wantMessage)
+			api.AssertExpectations(t)
+		})
+	}
+}
+
 func TestHandleWebhook_DefaultEventType(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{
@@ -418,6 +687,68 @@ func TestHandleWebhook_StoreError(t *testing.T) {
 }
 
 // --- Get events endpoint tests ---
+
+func TestHandleUpdateWebhookTokens_PreservesExistingSecretByName(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{
+		WebhookSecret: "legacy-secret",
+		WebhookTokens: `[{"name":"ci","secret":"existing-secret","enabled":true,"team":"old-team","channels":["old-channel"],"require_signature":false}]`,
+	}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
+	api.On("SavePluginConfig", mock.MatchedBy(func(saved map[string]interface{}) bool {
+		rawTokens, ok := saved["WebhookTokens"].(string)
+		if !ok {
+			return false
+		}
+		var tokens []webhookTokenConfig
+		require.NoError(t, json.Unmarshal([]byte(rawTokens), &tokens))
+		require.Len(t, tokens, 1)
+		return tokens[0].Name == "ci" &&
+			tokens[0].Secret == "existing-secret" &&
+			tokens[0].Team == "new-team" &&
+			assert.ObjectsAreEqual([]string{"deployments", "alerts"}, tokens[0].Channels) &&
+			tokens[0].RequireSignature
+	})).Return((*model.AppError)(nil)).Once()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/webhook-tokens", strings.NewReader(`{"tokens":[{"name":"ci","secret":"","enabled":true,"team":"new-team","channels":["deployments","alerts"],"require_signature":true}]}`))
+	req.Header.Set("Mattermost-User-ID", "admin-user")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	updatedTokens, err := parseWebhookTokenConfigs(p.getConfiguration().WebhookTokens)
+	require.NoError(t, err)
+	require.Len(t, updatedTokens, 1)
+	assert.Equal(t, "existing-secret", updatedTokens[0].Secret)
+	assert.Equal(t, "new-team", updatedTokens[0].Team)
+	assert.Equal(t, []string{"deployments", "alerts"}, updatedTokens[0].Channels)
+	assert.True(t, updatedTokens[0].RequireSignature)
+	api.AssertExpectations(t)
+}
+
+func TestHandleUpdateWebhookTokens_RequiresSecretForNewEnabledToken(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookTokens: `[]`}
+	p := newTestPlugin(t, api, cfg)
+
+	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/webhook-tokens", strings.NewReader(`{"tokens":[{"name":"new-ci","secret":"","enabled":true}]}`))
+	req.Header.Set("Mattermost-User-ID", "admin-user")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Webhook token secret is required for enabled token: new-ci")
+	assert.Equal(t, `[]`, p.getConfiguration().WebhookTokens)
+	api.AssertNotCalled(t, "SavePluginConfig", mock.Anything)
+	api.AssertExpectations(t)
+}
 
 func TestHandleGetEvents_ValidRequest(t *testing.T) {
 	api := &plugintest.API{}
@@ -980,6 +1311,35 @@ func TestHandleMarkEventsRead_RejectsInvalidPayloads(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		assert.Contains(t, rec.Body.String(), "too many event_ids")
 	})
+}
+
+func TestHandleWebhookBatch_ObjectPayloadContinuesAfterInvalidItem(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	body := `{"events":[{"title":"first","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"},{"message":"missing title","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook/batch", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusMultiStatus, rec.Code)
+	var resp BatchWebhookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Results, 2)
+	assert.Equal(t, 0, resp.Results[0].Index)
+	assert.Equal(t, http.StatusCreated, resp.Results[0].Status)
+	require.NotNil(t, resp.Results[0].Event)
+	assert.Equal(t, "first", resp.Results[0].Event.Title)
+	assert.Empty(t, resp.Results[0].Error)
+	assert.Equal(t, 1, resp.Results[1].Index)
+	assert.Equal(t, http.StatusBadRequest, resp.Results[1].Status)
+	assert.Nil(t, resp.Results[1].Event)
+	assert.Equal(t, "Title is required", resp.Results[1].Error)
+	api.AssertExpectations(t)
 }
 
 func TestHandleWebhook_RejectsOversizedBody(t *testing.T) {
@@ -1693,364 +2053,4 @@ func TestHandleWebhook_TooManyChannels(t *testing.T) {
 	p.router.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-}
-
-func expectWebhookEventCreate(api *plugintest.API, teamID string) {
-	api.On("KVSet", mock.MatchedBy(func(key string) bool {
-		return strings.HasPrefix(key, "event:")
-	}), mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
-	api.On("KVGet", globalIndexKey(teamID)).Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", globalIndexKey(teamID), mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("KVGet", retentionIndexKey(teamID)).Return([]byte(nil), (*model.AppError)(nil))
-	api.On("KVCompareAndSet", retentionIndexKey(teamID), mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
-	api.On("PublishWebSocketEvent", "new_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast"))
-}
-
-func TestHandleWebhook_MetadataFieldsRoundTrip(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
-	p := newTestPlugin(t, api, cfg)
-
-	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
-	payload := `{"title":"incident","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","severity":"critical","status":"open","environment":"staging","expires_at":4102444800000,"pinned":true,"resolved_at":12345}`
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Webhook-Secret", "s3cret")
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusCreated, rec.Code)
-	var event ClientEvent
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
-	assert.Equal(t, "critical", event.Severity)
-	assert.Equal(t, "open", event.Status)
-	assert.Equal(t, "staging", event.Environment)
-	assert.Equal(t, int64(4102444800000), event.ExpiresAt)
-	assert.True(t, event.Pinned)
-	assert.Equal(t, int64(12345), event.ResolvedAt)
-	api.AssertExpectations(t)
-}
-
-func TestHandleWebhook_RejectsInvalidPayloadMetadataAndLinks(t *testing.T) {
-	tests := []struct {
-		name        string
-		payload     string
-		wantMessage string
-	}{
-		{
-			name:        "overlong title",
-			payload:     fmt.Sprintf(`{"title":"%s","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`, strings.Repeat("a", maxWebhookTitleLength+1)),
-			wantMessage: "title exceeds maximum length",
-		},
-		{
-			name: "too many links",
-			payload: func() string {
-				links := make([]EventLink, maxWebhookLinkCount+1)
-				for i := range links {
-					links[i] = EventLink{URL: fmt.Sprintf("https://example.com/%d", i)}
-				}
-				body, err := json.Marshal(WebhookPayload{Title: "links", TeamID: "aaaaaaaaaaaaaaaaaaaaaaaaaa", Links: links})
-				require.NoError(t, err)
-				return string(body)
-			}(),
-			wantMessage: "Maximum 10 links per event",
-		},
-		{
-			name:        "unsafe link scheme",
-			payload:     `{"title":"bad link","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","links":[{"url":"javascript:alert(1)","label":"x"}]}`,
-			wantMessage: "Unsupported link URL scheme",
-		},
-		{
-			name:        "invalid severity",
-			payload:     `{"title":"bad severity","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","severity":"urgent"}`,
-			wantMessage: "invalid severity",
-		},
-		{
-			name:        "invalid status",
-			payload:     `{"title":"bad status","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","status":"mystery"}`,
-			wantMessage: "invalid status",
-		},
-		{
-			name:        "negative expires_at",
-			payload:     `{"title":"bad expiry","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","expires_at":-1}`,
-			wantMessage: "expires_at must be non-negative",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			api := &plugintest.API{}
-			cfg := &configuration{WebhookSecret: "s3cret"}
-			p := newTestPlugin(t, api, cfg)
-
-			req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(tt.payload))
-			req.Header.Set("X-Webhook-Secret", "s3cret")
-			rec := httptest.NewRecorder()
-
-			p.router.ServeHTTP(rec, req)
-
-			assert.Equal(t, http.StatusBadRequest, rec.Code)
-			assert.Contains(t, rec.Body.String(), tt.wantMessage)
-			api.AssertExpectations(t)
-		})
-	}
-}
-
-func TestHandleWebhook_TokenScopeRestrictions(t *testing.T) {
-	t.Run("team mismatch", func(t *testing.T) {
-		api := &plugintest.API{}
-		cfg := &configuration{WebhookTokens: `[{"name":"ci","secret":"token-secret","team":"allowed-team"}]`}
-		p := newTestPlugin(t, api, cfg)
-
-		api.On("GetTeamByName", "allowed-team").Return(&model.Team{Id: "bbbbbbbbbbbbbbbbbbbbbbbbbb", Name: "allowed-team"}, (*model.AppError)(nil))
-		req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
-		req.Header.Set("X-Webhook-Secret", "token-secret")
-		rec := httptest.NewRecorder()
-
-		p.router.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusForbidden, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Webhook token is not allowed for this team")
-		api.AssertExpectations(t)
-	})
-
-	t.Run("channel-restricted token rejects team-wide payload", func(t *testing.T) {
-		api := &plugintest.API{}
-		cfg := &configuration{WebhookTokens: `[{"name":"ci","secret":"token-secret","channels":["town-square"]}]`}
-		p := newTestPlugin(t, api, cfg)
-
-		req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
-		req.Header.Set("X-Webhook-Secret", "token-secret")
-		rec := httptest.NewRecorder()
-
-		p.router.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusForbidden, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Webhook token is not allowed to publish team-wide events")
-		api.AssertExpectations(t)
-	})
-}
-
-func TestHandleWebhook_TokenCannotUpdateEventOutsideItsChannelScope(t *testing.T) {
-	api := &plugintest.API{}
-	teamID := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-	allowedChannel := "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-	otherChannel := "cccccccccccccccccccccccccc"
-	config := &configuration{WebhookTokens: `[{"name":"sample-token","secret":"sample-secret","channels":["bbbbbbbbbbbbbbbbbbbbbbbbbb"]}]`}
-	p := newTestPlugin(t, api, config)
-	existing := Event{ID: "existing-event", TeamID: teamID, Title: "Other channel event", ExternalID: "sample-external-id", Channels: []string{otherChannel}}
-	data, err := json.Marshal(existing)
-	require.NoError(t, err)
-	api.On("GetChannel", allowedChannel).Return(&model.Channel{Id: allowedChannel, TeamId: teamID, Type: model.ChannelTypeOpen}, (*model.AppError)(nil)).Times(3)
-	api.On("KVGet", "ext_id:"+teamID+":sample-external-id").Return([]byte(existing.ID), (*model.AppError)(nil)).Once()
-	api.On("KVGet", eventKey(existing.ID)).Return(data, (*model.AppError)(nil)).Once()
-	payload := `{"title":"Changed event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"sample-external-id","channels":["bbbbbbbbbbbbbbbbbbbbbbbbbb"]}`
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Webhook-Secret", "sample-secret")
-	rec := httptest.NewRecorder()
-	p.router.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusForbidden, rec.Code)
-	api.AssertNotCalled(t, "KVSet", mock.Anything, mock.Anything)
-	api.AssertNotCalled(t, "PublishWebSocketEvent", mock.Anything, mock.Anything, mock.Anything)
-	api.AssertExpectations(t)
-}
-
-func signTimelineWebhook(secret, timestamp, body string) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(timestamp + "." + body))
-	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
-}
-
-func TestHandleWebhook_SignedRequestCreatesWithoutSharedSecret(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
-	p := newTestPlugin(t, api, cfg)
-
-	payload := `{"title":"signed deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
-	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	api.On("KVSetWithOptions", mock.MatchedBy(func(key string) bool {
-		return strings.HasPrefix(key, webhookReplayKeyPrefix)
-	}), []byte{1}, mock.MatchedBy(func(options model.PluginKVSetOptions) bool {
-		return options.Atomic && options.OldValue == nil && options.ExpireInSeconds == int64(webhookSignatureWindow/time.Second)
-	})).Return(true, (*model.AppError)(nil)).Once()
-	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
-
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Timeline-Timestamp", timestamp)
-	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusCreated, rec.Code)
-	var event ClientEvent
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
-	assert.Equal(t, "signed deploy", event.Title)
-	api.AssertExpectations(t)
-}
-
-func TestHandleWebhook_RejectsStaleSignedTimestamp(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookSecret: "s3cret"}
-	p := newTestPlugin(t, api, cfg)
-
-	payload := `{"title":"stale","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
-	timestamp := fmt.Sprintf("%d", time.Now().Add(-webhookSignatureWindow-time.Minute).Unix())
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Timeline-Timestamp", timestamp)
-	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Webhook signature timestamp outside allowed window")
-	api.AssertNotCalled(t, "KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything)
-}
-
-func TestHandleWebhook_RejectsReplayedSignature(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookSecret: "s3cret"}
-	p := newTestPlugin(t, api, cfg)
-
-	payload := `{"title":"replay","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
-	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	api.On("KVSetWithOptions", mock.MatchedBy(func(key string) bool {
-		return strings.HasPrefix(key, webhookReplayKeyPrefix)
-	}), []byte{1}, mock.AnythingOfType("model.PluginKVSetOptions")).Return(false, (*model.AppError)(nil)).Once()
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Timeline-Timestamp", timestamp)
-	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusConflict, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Webhook replay detected")
-	api.AssertExpectations(t)
-}
-
-func TestHandleWebhook_RequireSignedWebhooksRejectsUnsignedSecret(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookSecret: "s3cret", RequireSignedWebhooks: true}
-	p := newTestPlugin(t, api, cfg)
-
-	payload := `{"title":"unsigned","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Webhook-Secret", "s3cret")
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Signed webhook required")
-}
-
-func TestHandleWebhook_FutureTimestampReplayProtectionCoversValidityWindow(t *testing.T) {
-	api := &plugintest.API{}
-	p := newTestPlugin(t, api, &configuration{WebhookSecret: "sample-secret"})
-	payload := `{"title":"signed event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
-	timestamp := fmt.Sprintf("%d", time.Now().Add(4*time.Minute).Unix())
-	api.On("KVSetWithOptions", mock.AnythingOfType("string"), []byte{1}, mock.MatchedBy(func(options model.PluginKVSetOptions) bool {
-		return options.Atomic && options.OldValue == nil && options.ExpireInSeconds >= 539 && options.ExpireInSeconds <= 540
-	})).Return(true, (*model.AppError)(nil)).Once()
-	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
-	req.Header.Set("X-Timeline-Timestamp", timestamp)
-	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("sample-secret", timestamp, payload))
-	rec := httptest.NewRecorder()
-	p.router.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusCreated, rec.Code)
-	api.AssertExpectations(t)
-}
-
-func TestHandleWebhookBatch_ObjectPayloadContinuesAfterInvalidItem(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
-	p := newTestPlugin(t, api, cfg)
-
-	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
-	body := `{"events":[{"title":"first","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"},{"message":"missing title","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/webhook/batch", strings.NewReader(body))
-	req.Header.Set("X-Webhook-Secret", "s3cret")
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusMultiStatus, rec.Code)
-	var resp BatchWebhookResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Results, 2)
-	assert.Equal(t, 0, resp.Results[0].Index)
-	assert.Equal(t, http.StatusCreated, resp.Results[0].Status)
-	require.NotNil(t, resp.Results[0].Event)
-	assert.Equal(t, "first", resp.Results[0].Event.Title)
-	assert.Empty(t, resp.Results[0].Error)
-	assert.Equal(t, 1, resp.Results[1].Index)
-	assert.Equal(t, http.StatusBadRequest, resp.Results[1].Status)
-	assert.Nil(t, resp.Results[1].Event)
-	assert.Equal(t, "Title is required", resp.Results[1].Error)
-	api.AssertExpectations(t)
-}
-
-func TestHandleUpdateWebhookTokens_PreservesExistingSecretByName(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{
-		WebhookSecret: "legacy-secret",
-		WebhookTokens: `[{"name":"ci","secret":"existing-secret","enabled":true,"team":"old-team","channels":["old-channel"],"require_signature":false}]`,
-	}
-	p := newTestPlugin(t, api, cfg)
-
-	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
-	api.On("SavePluginConfig", mock.MatchedBy(func(saved map[string]interface{}) bool {
-		rawTokens, ok := saved["WebhookTokens"].(string)
-		if !ok {
-			return false
-		}
-		var tokens []webhookTokenConfig
-		require.NoError(t, json.Unmarshal([]byte(rawTokens), &tokens))
-		require.Len(t, tokens, 1)
-		return tokens[0].Name == "ci" &&
-			tokens[0].Secret == "existing-secret" &&
-			tokens[0].Team == "new-team" &&
-			assert.ObjectsAreEqual([]string{"deployments", "alerts"}, tokens[0].Channels) &&
-			tokens[0].RequireSignature
-	})).Return((*model.AppError)(nil)).Once()
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/webhook-tokens", strings.NewReader(`{"tokens":[{"name":"ci","secret":"","enabled":true,"team":"new-team","channels":["deployments","alerts"],"require_signature":true}]}`))
-	req.Header.Set("Mattermost-User-ID", "admin-user")
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	updatedTokens, err := parseWebhookTokenConfigs(p.getConfiguration().WebhookTokens)
-	require.NoError(t, err)
-	require.Len(t, updatedTokens, 1)
-	assert.Equal(t, "existing-secret", updatedTokens[0].Secret)
-	assert.Equal(t, "new-team", updatedTokens[0].Team)
-	assert.Equal(t, []string{"deployments", "alerts"}, updatedTokens[0].Channels)
-	assert.True(t, updatedTokens[0].RequireSignature)
-	api.AssertExpectations(t)
-}
-
-func TestHandleUpdateWebhookTokens_RequiresSecretForNewEnabledToken(t *testing.T) {
-	api := &plugintest.API{}
-	cfg := &configuration{WebhookTokens: `[]`}
-	p := newTestPlugin(t, api, cfg)
-
-	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/webhook-tokens", strings.NewReader(`{"tokens":[{"name":"new-ci","secret":"","enabled":true}]}`))
-	req.Header.Set("Mattermost-User-ID", "admin-user")
-	rec := httptest.NewRecorder()
-
-	p.router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Webhook token secret is required for enabled token: new-ci")
-	assert.Equal(t, `[]`, p.getConfiguration().WebhookTokens)
-	api.AssertNotCalled(t, "SavePluginConfig", mock.Anything)
-	api.AssertExpectations(t)
 }

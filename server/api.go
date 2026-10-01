@@ -53,6 +53,17 @@ func (p *Plugin) mattermostAuthRequired(next http.Handler) http.Handler {
 	})
 }
 
+func (p *Plugin) systemAdminRequired(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.Header.Get("Mattermost-User-ID")
+		if !p.API.HasPermissionTo(userID, model.PermissionManageSystem) {
+			http.Error(w, "System admin permission required", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // normalizeLinks converts a single legacy link to a links array, or returns the payload links.
 func normalizeLinks(payload WebhookPayload) []EventLink {
 	if len(payload.Links) > 0 {
@@ -227,6 +238,116 @@ func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	p.writeTimelineEventResponse(w, stored.status, stored.eventName, stored.event)
 }
 
+func readWebhookBody(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, *webhookHandlerError) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if strings.Contains(err.Error(), "http: request body too large") {
+			return nil, &webhookHandlerError{message: "Payload too large", status: http.StatusRequestEntityTooLarge}
+		}
+		return nil, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
+	}
+	return body, nil
+}
+
+func decodeWebhookPayload(body []byte) (WebhookPayload, *webhookHandlerError) {
+	var payload WebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return WebhookPayload{}, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
+	}
+	return payload, nil
+}
+
+func (p *Plugin) validateWebhookPayloadForRequest(r *http.Request, payload WebhookPayload, credential webhookCredential) (validatedWebhookRequest, *webhookHandlerError) {
+	teamIdentifier := r.URL.Query().Get("team_id")
+	if teamIdentifier == "" {
+		teamIdentifier = payload.TeamID
+	}
+	teamID, handlerErr := p.resolveWebhookTeamID(teamIdentifier)
+	if handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+	payload.TeamID = teamID
+
+	if payload.Severity != nil {
+		severity := strings.ToLower(strings.TrimSpace(*payload.Severity))
+		payload.Severity = &severity
+	}
+	if payload.Status != nil {
+		status := strings.ToLower(strings.TrimSpace(*payload.Status))
+		payload.Status = &status
+	}
+
+	eventType := payload.EventType
+	if eventType == "" {
+		eventType = "generic"
+	}
+
+	channelIDs, handlerErr := p.resolveWebhookChannelIDs(teamID, payload.Channels)
+	if handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+	payload.Channels = channelIDs
+
+	if !credential.Legacy && strings.TrimSpace(payload.Source) == "" && credential.Name != "" {
+		payload.Source = credential.Name
+	}
+
+	incomingLinks := normalizeLinks(payload)
+	if handlerErr := validateWebhookPayload(payload, incomingLinks); handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+	if handlerErr := p.enforceWebhookCredentialScope(teamID, channelIDs, credential); handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+
+	return validatedWebhookRequest{
+		teamID:        teamID,
+		payload:       payload,
+		eventType:     eventType,
+		incomingLinks: incomingLinks,
+		credential:    credential,
+	}, nil
+}
+
+func (p *Plugin) enforceWebhookCredentialScope(teamID string, payloadChannelIDs []string, credential webhookCredential) *webhookHandlerError {
+	if credential.Legacy {
+		return nil
+	}
+
+	if credential.Team != "" {
+		allowedTeamID, handlerErr := p.resolveWebhookTeamID(credential.Team)
+		if handlerErr != nil {
+			return handlerErr
+		}
+		if allowedTeamID != teamID {
+			return &webhookHandlerError{message: "Webhook token is not allowed for this team", status: http.StatusForbidden}
+		}
+	}
+
+	if len(credential.Channels) == 0 {
+		return nil
+	}
+	if len(payloadChannelIDs) == 0 {
+		return &webhookHandlerError{message: "Webhook token is not allowed to publish team-wide events", status: http.StatusForbidden}
+	}
+
+	allowedChannelIDs := make(map[string]struct{}, len(credential.Channels))
+	for _, channelIdentifier := range credential.Channels {
+		channelID, handlerErr := p.resolveWebhookChannelID(teamID, channelIdentifier)
+		if handlerErr != nil {
+			return handlerErr
+		}
+		allowedChannelIDs[channelID] = struct{}{}
+	}
+	for _, channelID := range payloadChannelIDs {
+		if _, ok := allowedChannelIDs[channelID]; !ok {
+			return &webhookHandlerError{message: "Webhook token is not allowed for one or more channels", status: http.StatusForbidden}
+		}
+	}
+	return nil
+}
+
 func (p *Plugin) storeWebhookEvent(request validatedWebhookRequest) (storedWebhookEvent, *webhookHandlerError) {
 	if request.payload.ExternalID != "" {
 		existingID, err := p.store.LookupByExternalID(request.teamID, request.payload.ExternalID)
@@ -305,6 +426,140 @@ func newWebhookEvent(teamID string, payload WebhookPayload, eventType string, in
 	return event
 }
 
+func applyWebhookMetadata(event *Event, payload WebhookPayload, now int64) {
+	if payload.Severity != nil {
+		event.Severity = *payload.Severity
+	}
+	if payload.Status != nil {
+		event.Status = *payload.Status
+		if *payload.Status == "resolved" && (payload.ResolvedAt == nil || *payload.ResolvedAt == 0) {
+			event.ResolvedAt = now
+		}
+		if *payload.Status != "resolved" && payload.ResolvedAt != nil && *payload.ResolvedAt == 0 {
+			event.ResolvedAt = 0
+		}
+	}
+	if payload.Environment != nil {
+		event.Environment = *payload.Environment
+	}
+	if payload.ExpiresAt != nil {
+		event.ExpiresAt = *payload.ExpiresAt
+	}
+	if payload.Pinned != nil {
+		event.Pinned = *payload.Pinned
+	}
+	if payload.ResolvedAt != nil && (payload.Status == nil || *payload.Status != "resolved" || *payload.ResolvedAt != 0) {
+		event.ResolvedAt = *payload.ResolvedAt
+	}
+}
+
+func (p *Plugin) publishTimelineEventResponse(eventName string, event Event) (ClientEvent, *webhookHandlerError) {
+	clientEvent := clientEventFrom(event, "")
+	websocketJSON, err := json.Marshal(clientEvent)
+	if err != nil {
+		p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
+		return ClientEvent{}, &webhookHandlerError{message: "Failed to serialize event", status: http.StatusInternalServerError}
+	}
+
+	p.publishTimelineEvent(eventName, event, websocketJSON)
+	return webhookEventResponseFrom(event), nil
+}
+
+func (p *Plugin) writeTimelineEventResponse(w http.ResponseWriter, status int, eventName string, event Event) {
+	clientEvent, handlerErr := p.publishTimelineEventResponse(eventName, event)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	responseJSON, err := json.Marshal(clientEvent)
+	if err != nil {
+		p.API.LogError("Failed to marshal webhook event response", "error", err.Error())
+		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(responseJSON)
+}
+
+func (p *Plugin) getAllVisibleEventsForUser(userID, teamID, channelID string) ([]Event, *webhookHandlerError) {
+	if _, appErr := p.API.GetTeamMember(teamID, userID); appErr != nil {
+		return nil, &webhookHandlerError{message: "Not a member of this team", status: http.StatusForbidden}
+	}
+
+	if channelID != "" {
+		if _, appErr := p.API.GetChannelMember(channelID, userID); appErr != nil {
+			return nil, &webhookHandlerError{message: "Not a member of this channel", status: http.StatusForbidden}
+		}
+	}
+
+	var events []Event
+	var err error
+	if channelID != "" {
+		events, err = p.store.GetAllEventsByChannel(teamID, channelID)
+	} else {
+		events, err = p.store.GetAllGlobalEvents(teamID)
+	}
+	if err != nil {
+		p.API.LogError("Failed to get events", "error", err.Error())
+		return nil, &webhookHandlerError{message: "Failed to get events", status: http.StatusInternalServerError}
+	}
+	return events, nil
+}
+
+func parseEventFilterOptions(r *http.Request, now int64) (EventFilterOptions, *webhookHandlerError) {
+	query := r.URL.Query()
+	filters := EventFilterOptions{
+		Query:       query.Get("q"),
+		EventType:   query.Get("event_type"),
+		Source:      query.Get("source"),
+		Severity:    strings.TrimSpace(query.Get("severity")),
+		Status:      strings.TrimSpace(query.Get("status")),
+		Environment: query.Get("environment"),
+		Now:         now,
+	}
+	if filters.Severity != "" && !isAllowedStringValue(filters.Severity, allowedSeverities) {
+		return EventFilterOptions{}, &webhookHandlerError{message: "invalid severity filter", status: http.StatusBadRequest}
+	}
+	if filters.Status != "" && !isAllowedStringValue(filters.Status, allowedStatuses) {
+		return EventFilterOptions{}, &webhookHandlerError{message: "invalid status filter", status: http.StatusBadRequest}
+	}
+	var handlerErr *webhookHandlerError
+	filters.Pinned, handlerErr = parseOptionalBoolFilter(query.Get("pinned"), "pinned")
+	if handlerErr != nil {
+		return EventFilterOptions{}, handlerErr
+	}
+	filters.Active, handlerErr = parseOptionalBoolFilter(query.Get("active"), "active")
+	if handlerErr != nil {
+		return EventFilterOptions{}, handlerErr
+	}
+	filters.Unread, handlerErr = parseOptionalBoolFilter(query.Get("unread"), "unread")
+	if handlerErr != nil {
+		return EventFilterOptions{}, handlerErr
+	}
+	return filters, nil
+}
+
+func parseOptionalBoolFilter(rawValue, name string) (*bool, *webhookHandlerError) {
+	if rawValue == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseBool(rawValue)
+	if err != nil {
+		return nil, &webhookHandlerError{message: name + " must be true or false", status: http.StatusBadRequest}
+	}
+	return &value, nil
+}
+
+func unreadIDSet(events []Event) map[string]struct{} {
+	unreadIDs := make(map[string]struct{}, len(events))
+	for _, event := range events {
+		unreadIDs[event.ID] = struct{}{}
+	}
+	return unreadIDs
+}
 func (p *Plugin) getVisibleEventsForUser(userID, teamID, channelID string, offset, limit int) ([]Event, int, *webhookHandlerError) {
 	if _, appErr := p.API.GetTeamMember(teamID, userID); appErr != nil {
 		return nil, 0, &webhookHandlerError{message: "Not a member of this team", status: http.StatusForbidden}
@@ -489,260 +744,4 @@ func (p *Plugin) handleMarkEventsRead(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(readState); err != nil {
 		p.API.LogError("Failed to encode read state response", "error", err.Error())
 	}
-}
-
-func applyWebhookMetadata(event *Event, payload WebhookPayload, now int64) {
-	if payload.Severity != nil {
-		event.Severity = *payload.Severity
-	}
-	if payload.Status != nil {
-		event.Status = *payload.Status
-		if *payload.Status == "resolved" && (payload.ResolvedAt == nil || *payload.ResolvedAt == 0) {
-			event.ResolvedAt = now
-		}
-		if *payload.Status != "resolved" && payload.ResolvedAt != nil && *payload.ResolvedAt == 0 {
-			event.ResolvedAt = 0
-		}
-	}
-	if payload.Environment != nil {
-		event.Environment = *payload.Environment
-	}
-	if payload.ExpiresAt != nil {
-		event.ExpiresAt = *payload.ExpiresAt
-	}
-	if payload.Pinned != nil {
-		event.Pinned = *payload.Pinned
-	}
-	if payload.ResolvedAt != nil && (payload.Status == nil || *payload.Status != "resolved" || *payload.ResolvedAt != 0) {
-		event.ResolvedAt = *payload.ResolvedAt
-	}
-}
-
-func readWebhookBody(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, *webhookHandlerError) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		if strings.Contains(err.Error(), "http: request body too large") {
-			return nil, &webhookHandlerError{message: "Payload too large", status: http.StatusRequestEntityTooLarge}
-		}
-		return nil, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
-	}
-	return body, nil
-}
-
-func decodeWebhookPayload(body []byte) (WebhookPayload, *webhookHandlerError) {
-	var payload WebhookPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return WebhookPayload{}, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
-	}
-	return payload, nil
-}
-
-func (p *Plugin) validateWebhookPayloadForRequest(r *http.Request, payload WebhookPayload, credential webhookCredential) (validatedWebhookRequest, *webhookHandlerError) {
-	teamIdentifier := r.URL.Query().Get("team_id")
-	if teamIdentifier == "" {
-		teamIdentifier = payload.TeamID
-	}
-	teamID, handlerErr := p.resolveWebhookTeamID(teamIdentifier)
-	if handlerErr != nil {
-		return validatedWebhookRequest{}, handlerErr
-	}
-	payload.TeamID = teamID
-
-	if payload.Severity != nil {
-		severity := strings.ToLower(strings.TrimSpace(*payload.Severity))
-		payload.Severity = &severity
-	}
-	if payload.Status != nil {
-		status := strings.ToLower(strings.TrimSpace(*payload.Status))
-		payload.Status = &status
-	}
-
-	eventType := payload.EventType
-	if eventType == "" {
-		eventType = "generic"
-	}
-
-	channelIDs, handlerErr := p.resolveWebhookChannelIDs(teamID, payload.Channels)
-	if handlerErr != nil {
-		return validatedWebhookRequest{}, handlerErr
-	}
-	payload.Channels = channelIDs
-
-	if !credential.Legacy && strings.TrimSpace(payload.Source) == "" && credential.Name != "" {
-		payload.Source = credential.Name
-	}
-
-	incomingLinks := normalizeLinks(payload)
-	if handlerErr := validateWebhookPayload(payload, incomingLinks); handlerErr != nil {
-		return validatedWebhookRequest{}, handlerErr
-	}
-	if handlerErr := p.enforceWebhookCredentialScope(teamID, channelIDs, credential); handlerErr != nil {
-		return validatedWebhookRequest{}, handlerErr
-	}
-
-	return validatedWebhookRequest{
-		teamID:        teamID,
-		payload:       payload,
-		eventType:     eventType,
-		incomingLinks: incomingLinks,
-		credential:    credential,
-	}, nil
-}
-
-func (p *Plugin) enforceWebhookCredentialScope(teamID string, payloadChannelIDs []string, credential webhookCredential) *webhookHandlerError {
-	if credential.Legacy {
-		return nil
-	}
-
-	if credential.Team != "" {
-		allowedTeamID, handlerErr := p.resolveWebhookTeamID(credential.Team)
-		if handlerErr != nil {
-			return handlerErr
-		}
-		if allowedTeamID != teamID {
-			return &webhookHandlerError{message: "Webhook token is not allowed for this team", status: http.StatusForbidden}
-		}
-	}
-
-	if len(credential.Channels) == 0 {
-		return nil
-	}
-	if len(payloadChannelIDs) == 0 {
-		return &webhookHandlerError{message: "Webhook token is not allowed to publish team-wide events", status: http.StatusForbidden}
-	}
-
-	allowedChannelIDs := make(map[string]struct{}, len(credential.Channels))
-	for _, channelIdentifier := range credential.Channels {
-		channelID, handlerErr := p.resolveWebhookChannelID(teamID, channelIdentifier)
-		if handlerErr != nil {
-			return handlerErr
-		}
-		allowedChannelIDs[channelID] = struct{}{}
-	}
-	for _, channelID := range payloadChannelIDs {
-		if _, ok := allowedChannelIDs[channelID]; !ok {
-			return &webhookHandlerError{message: "Webhook token is not allowed for one or more channels", status: http.StatusForbidden}
-		}
-	}
-	return nil
-}
-
-func (p *Plugin) publishTimelineEventResponse(eventName string, event Event) (ClientEvent, *webhookHandlerError) {
-	clientEvent := clientEventFrom(event, "")
-	websocketJSON, err := json.Marshal(clientEvent)
-	if err != nil {
-		p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
-		return ClientEvent{}, &webhookHandlerError{message: "Failed to serialize event", status: http.StatusInternalServerError}
-	}
-
-	p.publishTimelineEvent(eventName, event, websocketJSON)
-	return webhookEventResponseFrom(event), nil
-}
-
-func (p *Plugin) writeTimelineEventResponse(w http.ResponseWriter, status int, eventName string, event Event) {
-	clientEvent, handlerErr := p.publishTimelineEventResponse(eventName, event)
-	if handlerErr != nil {
-		http.Error(w, handlerErr.message, handlerErr.status)
-		return
-	}
-
-	responseJSON, err := json.Marshal(clientEvent)
-	if err != nil {
-		p.API.LogError("Failed to marshal webhook event response", "error", err.Error())
-		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(responseJSON)
-}
-
-func (p *Plugin) getAllVisibleEventsForUser(userID, teamID, channelID string) ([]Event, *webhookHandlerError) {
-	if _, appErr := p.API.GetTeamMember(teamID, userID); appErr != nil {
-		return nil, &webhookHandlerError{message: "Not a member of this team", status: http.StatusForbidden}
-	}
-
-	if channelID != "" {
-		if _, appErr := p.API.GetChannelMember(channelID, userID); appErr != nil {
-			return nil, &webhookHandlerError{message: "Not a member of this channel", status: http.StatusForbidden}
-		}
-	}
-
-	var events []Event
-	var err error
-	if channelID != "" {
-		events, err = p.store.GetAllEventsByChannel(teamID, channelID)
-	} else {
-		events, err = p.store.GetAllGlobalEvents(teamID)
-	}
-	if err != nil {
-		p.API.LogError("Failed to get events", "error", err.Error())
-		return nil, &webhookHandlerError{message: "Failed to get events", status: http.StatusInternalServerError}
-	}
-	return events, nil
-}
-
-func parseEventFilterOptions(r *http.Request, now int64) (EventFilterOptions, *webhookHandlerError) {
-	query := r.URL.Query()
-	filters := EventFilterOptions{
-		Query:       query.Get("q"),
-		EventType:   query.Get("event_type"),
-		Source:      query.Get("source"),
-		Severity:    strings.TrimSpace(query.Get("severity")),
-		Status:      strings.TrimSpace(query.Get("status")),
-		Environment: query.Get("environment"),
-		Now:         now,
-	}
-	if filters.Severity != "" && !isAllowedStringValue(filters.Severity, allowedSeverities) {
-		return EventFilterOptions{}, &webhookHandlerError{message: "invalid severity filter", status: http.StatusBadRequest}
-	}
-	if filters.Status != "" && !isAllowedStringValue(filters.Status, allowedStatuses) {
-		return EventFilterOptions{}, &webhookHandlerError{message: "invalid status filter", status: http.StatusBadRequest}
-	}
-	var handlerErr *webhookHandlerError
-	filters.Pinned, handlerErr = parseOptionalBoolFilter(query.Get("pinned"), "pinned")
-	if handlerErr != nil {
-		return EventFilterOptions{}, handlerErr
-	}
-	filters.Active, handlerErr = parseOptionalBoolFilter(query.Get("active"), "active")
-	if handlerErr != nil {
-		return EventFilterOptions{}, handlerErr
-	}
-	filters.Unread, handlerErr = parseOptionalBoolFilter(query.Get("unread"), "unread")
-	if handlerErr != nil {
-		return EventFilterOptions{}, handlerErr
-	}
-	return filters, nil
-}
-
-func parseOptionalBoolFilter(rawValue, name string) (*bool, *webhookHandlerError) {
-	if rawValue == "" {
-		return nil, nil
-	}
-	value, err := strconv.ParseBool(rawValue)
-	if err != nil {
-		return nil, &webhookHandlerError{message: name + " must be true or false", status: http.StatusBadRequest}
-	}
-	return &value, nil
-}
-
-func unreadIDSet(events []Event) map[string]struct{} {
-	unreadIDs := make(map[string]struct{}, len(events))
-	for _, event := range events {
-		unreadIDs[event.ID] = struct{}{}
-	}
-	return unreadIDs
-}
-
-func (p *Plugin) systemAdminRequired(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get("Mattermost-User-ID")
-		if !p.API.HasPermissionTo(userID, model.PermissionManageSystem) {
-			http.Error(w, "System admin permission required", http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
