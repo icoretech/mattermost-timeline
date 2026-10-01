@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -1849,5 +1852,114 @@ func TestHandleWebhook_TokenCannotUpdateEventOutsideItsChannelScope(t *testing.T
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 	api.AssertNotCalled(t, "KVSet", mock.Anything, mock.Anything)
 	api.AssertNotCalled(t, "PublishWebSocketEvent", mock.Anything, mock.Anything, mock.Anything)
+	api.AssertExpectations(t)
+}
+
+func signTimelineWebhook(secret, timestamp, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(timestamp + "." + body))
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+func TestHandleWebhook_SignedRequestCreatesWithoutSharedSecret(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"signed deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	api.On("KVSetWithOptions", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, webhookReplayKeyPrefix)
+	}), []byte{1}, mock.MatchedBy(func(options model.PluginKVSetOptions) bool {
+		return options.Atomic && options.OldValue == nil && options.ExpireInSeconds == int64(webhookSignatureWindow/time.Second)
+	})).Return(true, (*model.AppError)(nil)).Once()
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	var event ClientEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &event))
+	assert.Equal(t, "signed deploy", event.Title)
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RejectsStaleSignedTimestamp(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret"}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"stale","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Add(-webhookSignatureWindow-time.Minute).Unix())
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Webhook signature timestamp outside allowed window")
+	api.AssertNotCalled(t, "KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestHandleWebhook_RejectsReplayedSignature(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret"}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"replay","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	api.On("KVSetWithOptions", mock.MatchedBy(func(key string) bool {
+		return strings.HasPrefix(key, webhookReplayKeyPrefix)
+	}), []byte{1}, mock.AnythingOfType("model.PluginKVSetOptions")).Return(false, (*model.AppError)(nil)).Once()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("s3cret", timestamp, payload))
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Webhook replay detected")
+	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_RequireSignedWebhooksRejectsUnsignedSecret(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", RequireSignedWebhooks: true}
+	p := newTestPlugin(t, api, cfg)
+
+	payload := `{"title":"unsigned","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Signed webhook required")
+}
+
+func TestHandleWebhook_FutureTimestampReplayProtectionCoversValidityWindow(t *testing.T) {
+	api := &plugintest.API{}
+	p := newTestPlugin(t, api, &configuration{WebhookSecret: "sample-secret"})
+	payload := `{"title":"signed event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	timestamp := fmt.Sprintf("%d", time.Now().Add(4*time.Minute).Unix())
+	api.On("KVSetWithOptions", mock.AnythingOfType("string"), []byte{1}, mock.MatchedBy(func(options model.PluginKVSetOptions) bool {
+		return options.Atomic && options.OldValue == nil && options.ExpireInSeconds >= 539 && options.ExpireInSeconds <= 540
+	})).Return(true, (*model.AppError)(nil)).Once()
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Timeline-Timestamp", timestamp)
+	req.Header.Set("X-Timeline-Signature", signTimelineWebhook("sample-secret", timestamp, payload))
+	rec := httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 	api.AssertExpectations(t)
 }

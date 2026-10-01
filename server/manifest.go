@@ -52,6 +52,16 @@ var manifestStr = strings.Replace(`
         "secret": true
       },
       {
+        "key": "RequireSignedWebhooks",
+        "display_name": "Require Signed Webhooks",
+        "type": "bool",
+        "help_text": "Require X-Timeline-Timestamp and X-Timeline-Signature for all webhook credentials. Leave disabled to preserve legacy X-Webhook-Secret integrations while accepting signed requests.",
+        "placeholder": "",
+        "default": false,
+        "hosting": "",
+        "secret": false
+      },
+      {
         "key": "MaxEventsStored",
         "display_name": "Maximum Events Stored",
         "type": "text",
