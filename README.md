@@ -37,7 +37,7 @@ Events stay in Mattermost plugin storage. No external timeline service is requir
 
 ### 1. Install the plugin
 
-Requirements: **Mattermost Server 7.0+**
+Requirements: **Mattermost Server 7.0+**. The 2.0 release is smoke-tested on Mattermost 11.11.1.
 
 1. Download the latest plugin bundle from [Releases](https://github.com/icoretech/mattermost-timeline/releases/latest)
 2. In Mattermost, open **System Console → Plugin Management → Upload Plugin**
