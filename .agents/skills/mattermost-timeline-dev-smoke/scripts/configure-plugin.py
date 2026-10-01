@@ -9,6 +9,10 @@ SITE_URL = os.environ.get("MM_SERVICESETTINGS_SITEURL", "http://localhost:18065"
 ADMIN_USERNAME = os.environ.get("MM_ADMIN_USERNAME", "admin@example.com")
 ADMIN_PASSWORD = os.environ.get("MM_ADMIN_PASSWORD", "Password1!")
 WEBHOOK_SECRET = os.environ.get("TIMELINE_WEBHOOK_SECRET", "timeline-smoke-secret")
+WEBHOOK_TOKENS = os.environ.get("TIMELINE_WEBHOOK_TOKENS")
+REQUIRE_SIGNED_WEBHOOKS = os.environ.get(
+    "TIMELINE_REQUIRE_SIGNED_WEBHOOKS", "false"
+).lower() in {"1", "true", "yes", "on"}
 PLUGIN_ID = "ch.icorete.mattermost-timeline"
 
 
@@ -53,6 +57,12 @@ def main():
     plugins = plugin_settings.setdefault("Plugins", {})
     timeline_config = plugins.setdefault(PLUGIN_ID, {})
     timeline_config["WebhookSecret"] = WEBHOOK_SECRET
+    if WEBHOOK_TOKENS is not None:
+        json.loads(WEBHOOK_TOKENS)
+        timeline_config["WebhookTokens"] = WEBHOOK_TOKENS
+    else:
+        timeline_config.setdefault("WebhookTokens", "[]")
+    timeline_config["RequireSignedWebhooks"] = REQUIRE_SIGNED_WEBHOOKS
     timeline_config.setdefault("MaxEventsStored", "500")
     timeline_config.setdefault("MaxEventsDisplayed", "100")
     timeline_config.setdefault("TimelineOrder", "oldest_first")
@@ -61,7 +71,9 @@ def main():
     request_json("PUT", "/api/v4/config", config, token=token)
     print(f"configured_plugin={PLUGIN_ID}")
     print(f"site_url={SITE_URL}")
-    print("webhook_secret_set=true")
+    print(f"webhook_secret_set={str(bool(WEBHOOK_SECRET)).lower()}")
+    print(f"webhook_tokens_set={str(WEBHOOK_TOKENS is not None).lower()}")
+    print(f"require_signed_webhooks={str(REQUIRE_SIGNED_WEBHOOKS).lower()}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -21,6 +23,24 @@ CHANNEL_SCOPE = os.environ.get("TIMELINE_CHANNEL_SCOPE", "false").lower() in {
     "yes",
     "on",
 }
+SIGNED_WEBHOOK = os.environ.get("TIMELINE_SIGNED_WEBHOOK", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+BATCH_WEBHOOK = os.environ.get("TIMELINE_BATCH", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SEVERITY = os.environ.get("TIMELINE_SEVERITY")
+STATUS = os.environ.get("TIMELINE_STATUS")
+ENVIRONMENT = os.environ.get("TIMELINE_ENVIRONMENT")
+PINNED = os.environ.get("TIMELINE_PINNED")
+EXPIRES_AT = os.environ.get("TIMELINE_EXPIRES_AT")
+RESOLVED_AT = os.environ.get("TIMELINE_RESOLVED_AT")
 TEAM_IDENTIFIER = os.environ.get("TIMELINE_TEAM_IDENTIFIER")
 CHANNEL_IDENTIFIER = os.environ.get("TIMELINE_CHANNEL_IDENTIFIER")
 PLUGIN_ID = "ch.icorete.mattermost-timeline"
@@ -80,6 +100,49 @@ def get_channel(token):
     return channel
 
 
+def optional_bool(value):
+    if value is None:
+        return None
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def optional_int(value):
+    if value is None:
+        return None
+    return int(value)
+
+
+def webhook_headers(body_bytes):
+    if not SIGNED_WEBHOOK:
+        return {"X-Webhook-Secret": WEBHOOK_SECRET}
+    timestamp = str(int(time.time()))
+    signed_body = timestamp.encode("utf-8") + b"." + body_bytes
+    signature = hmac.new(
+        WEBHOOK_SECRET.encode("utf-8"), signed_body, hashlib.sha256
+    ).hexdigest()
+    return {
+        "X-Timeline-Timestamp": timestamp,
+        "X-Timeline-Signature": f"sha256={signature}",
+    }
+
+
+def request_webhook(path, payload):
+    body_bytes = json.dumps(payload).encode("utf-8")
+    headers = webhook_headers(body_bytes)
+    headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(
+        f"{SITE_URL}{path}", data=body_bytes, method="POST", headers=headers
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response_body = response.read()
+            decoded = json.loads(response_body.decode("utf-8")) if response_body else {}
+            return decoded, response.headers
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"POST {path} failed with {error.code}: {detail}") from error
+
+
 def post_webhook(team, channel):
     team_identifier = TEAM_IDENTIFIER or team["name"]
     channel_identifier = ""
@@ -96,12 +159,31 @@ def post_webhook(team, channel):
         "external_id": EXTERNAL_ID,
         "channels": channels,
     }
-    event, _ = request_json(
-        "POST",
-        f"/plugins/{PLUGIN_ID}/webhook?team_id={urllib.parse.quote(team_identifier)}",
-        payload,
-        headers={"X-Webhook-Secret": WEBHOOK_SECRET},
-    )
+    for key, value in {
+        "severity": SEVERITY,
+        "status": STATUS,
+        "environment": ENVIRONMENT,
+        "pinned": optional_bool(PINNED),
+        "expires_at": optional_int(EXPIRES_AT),
+        "resolved_at": optional_int(RESOLVED_AT),
+    }.items():
+        if value is not None:
+            payload[key] = value
+
+    path = f"/plugins/{PLUGIN_ID}/webhook?team_id={urllib.parse.quote(team_identifier)}"
+    request_payload = payload
+    if BATCH_WEBHOOK:
+        path = f"/plugins/{PLUGIN_ID}/webhook/batch?team_id={urllib.parse.quote(team_identifier)}"
+        request_payload = {"events": [payload]}
+
+    response, _ = request_webhook(path, request_payload)
+    if BATCH_WEBHOOK:
+        result = response.get("results", [{}])[0]
+        if result.get("status") not in {200, 201}:
+            raise RuntimeError(f"batch webhook did not create event: {result}")
+        event = result.get("event", {})
+    else:
+        event = response
     return event, team_identifier, channel_identifier
 
 
@@ -141,6 +223,8 @@ def main():
     print(f"channel_id={channel['id']}")
     print(f"channel_name={channel['name']}")
     print(f"channel_scoped={str(CHANNEL_SCOPE).lower()}")
+    print(f"signed_webhook={str(SIGNED_WEBHOOK).lower()}")
+    print(f"batch_webhook={str(BATCH_WEBHOOK).lower()}")
     print(f"posted_team_identifier={posted_team_identifier}")
     if posted_channel_identifier:
         print(f"posted_channel_identifier={posted_channel_identifier}")

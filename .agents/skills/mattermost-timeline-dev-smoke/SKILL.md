@@ -106,9 +106,49 @@ TIMELINE_CHANNEL_SCOPE=false
 TIMELINE_TEAM_IDENTIFIER=example-org
 TIMELINE_CHANNEL_IDENTIFIER=town-square
 TIMELINE_EXTERNAL_ID=timeline-smoke-<generated>
+TIMELINE_WEBHOOK_SECRET='timeline-smoke-secret'
+TIMELINE_WEBHOOK_TOKENS='[{"name":"smoke","secret":"timeline-token-secret","enabled":true,"require_signature":true}]'
+TIMELINE_REQUIRE_SIGNED_WEBHOOKS=false
+TIMELINE_SIGNED_WEBHOOK=false
+TIMELINE_BATCH=false
+TIMELINE_SEVERITY=critical
+TIMELINE_STATUS=open
+TIMELINE_ENVIRONMENT=staging
+TIMELINE_PINNED=true
+TIMELINE_EXPIRES_AT=0
+TIMELINE_RESOLVED_AT=0
 ```
 
 Set `TIMELINE_CHANNEL_SCOPE=true` to send `channels: [<channel name>]`. By default the helper posts with the team name/slug and channel name to exercise the same path users copy from URLs. Override `TIMELINE_TEAM_IDENTIFIER` or `TIMELINE_CHANNEL_IDENTIFIER` with 26-character Mattermost IDs when you need to verify ID-only behavior. The helper then fetches `/plugins/ch.icorete.mattermost-timeline/api/v1/events` with the resolved ID context and prints the event id plus channel URL.
+
+Set `TIMELINE_SIGNED_WEBHOOK=true` to sign the exact JSON request body with `X-Timeline-Timestamp` and `X-Timeline-Signature`. The helper signs with `TIMELINE_WEBHOOK_SECRET`; when testing `TIMELINE_WEBHOOK_TOKENS`, either leave the legacy `TIMELINE_WEBHOOK_SECRET` empty while using the token secret for the posting helper, or use a distinct token secret because duplicate webhook credential secrets are rejected. Set `TIMELINE_BATCH=true` to post `{ "events": [payload] }` to `/webhook/batch` and validate the first successful result. Metadata env vars are only included when set.
+
+Signed smoke example:
+
+```bash
+MM_SERVICESETTINGS_SITEURL=http://localhost:18065 \
+MM_ADMIN_USERNAME=admin@example.com \
+MM_ADMIN_PASSWORD='Password1!' \
+TIMELINE_WEBHOOK_SECRET='timeline-smoke-secret' \
+TIMELINE_SIGNED_WEBHOOK=true \
+TIMELINE_SEVERITY=critical \
+TIMELINE_STATUS=open \
+TIMELINE_ENVIRONMENT=staging \
+TIMELINE_PINNED=true \
+.agents/skills/mattermost-timeline-dev-smoke/scripts/post-sample-event.py
+```
+
+Batch smoke example:
+
+```bash
+MM_SERVICESETTINGS_SITEURL=http://localhost:18065 \
+MM_ADMIN_USERNAME=admin@example.com \
+MM_ADMIN_PASSWORD='Password1!' \
+TIMELINE_WEBHOOK_SECRET='timeline-smoke-secret' \
+TIMELINE_SIGNED_WEBHOOK=true \
+TIMELINE_BATCH=true \
+.agents/skills/mattermost-timeline-dev-smoke/scripts/post-sample-event.py
+```
 
 ## Browser smoke checklist
 
