@@ -21,6 +21,7 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Webhook endpoint — authenticated via shared secret, no Mattermost session required
 	router.HandleFunc("/webhook", p.handleWebhook).Methods(http.MethodPost)
+	router.HandleFunc("/webhook/batch", p.handleWebhookBatch).Methods(http.MethodPost)
 
 	// Internal API — requires Mattermost session
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
@@ -78,6 +79,8 @@ func mergeLinks(existing, incoming []EventLink) []EventLink {
 }
 
 const maxWebhookBodyBytes = 256 * 1024
+const maxWebhookBatchBodyBytes = 1024 * 1024
+const maxWebhookBatchEvents = 50
 
 type validatedWebhookRequest struct {
 	teamID        string
@@ -96,6 +99,17 @@ type storedWebhookEvent struct {
 type webhookHandlerError struct {
 	message string
 	status  int
+}
+
+type BatchWebhookResponse struct {
+	Results []BatchWebhookResult `json:"results"`
+}
+
+type BatchWebhookResult struct {
+	Index  int          `json:"index"`
+	Status int          `json:"status"`
+	Event  *ClientEvent `json:"event,omitempty"`
+	Error  string       `json:"error,omitempty"`
 }
 
 type markEventsReadRequest struct {
@@ -207,7 +221,7 @@ func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.publishAndWriteTimelineEventResponse(w, stored.status, stored.eventName, stored.event)
+	p.writeTimelineEventResponse(w, stored.status, stored.eventName, stored.event)
 }
 
 func (p *Plugin) storeWebhookEvent(request validatedWebhookRequest) (storedWebhookEvent, *webhookHandlerError) {
@@ -286,28 +300,6 @@ func newWebhookEvent(teamID string, payload WebhookPayload, eventType string, in
 	}
 	applyWebhookMetadata(&event, payload, now)
 	return event
-}
-
-func (p *Plugin) publishAndWriteTimelineEventResponse(w http.ResponseWriter, status int, eventName string, event Event) {
-	websocketJSON, err := json.Marshal(clientEventFrom(event, ""))
-	if err != nil {
-		p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
-		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
-		return
-	}
-
-	responseJSON, err := json.Marshal(webhookEventResponseFrom(event))
-	if err != nil {
-		p.API.LogError("Failed to marshal webhook event response", "error", err.Error())
-		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
-		return
-	}
-
-	p.publishTimelineEvent(eventName, event, websocketJSON)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(responseJSON)
 }
 
 func (p *Plugin) getVisibleEventsForUser(userID, teamID, channelID string, offset, limit int) ([]Event, int, *webhookHandlerError) {
@@ -600,4 +592,35 @@ func (p *Plugin) enforceWebhookCredentialScope(teamID string, payloadChannelIDs 
 		}
 	}
 	return nil
+}
+
+func (p *Plugin) publishTimelineEventResponse(eventName string, event Event) (ClientEvent, *webhookHandlerError) {
+	clientEvent := clientEventFrom(event, "")
+	websocketJSON, err := json.Marshal(clientEvent)
+	if err != nil {
+		p.API.LogError("Failed to marshal event for broadcast", "error", err.Error())
+		return ClientEvent{}, &webhookHandlerError{message: "Failed to serialize event", status: http.StatusInternalServerError}
+	}
+
+	p.publishTimelineEvent(eventName, event, websocketJSON)
+	return webhookEventResponseFrom(event), nil
+}
+
+func (p *Plugin) writeTimelineEventResponse(w http.ResponseWriter, status int, eventName string, event Event) {
+	clientEvent, handlerErr := p.publishTimelineEventResponse(eventName, event)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	responseJSON, err := json.Marshal(clientEvent)
+	if err != nil {
+		p.API.LogError("Failed to marshal webhook event response", "error", err.Error())
+		http.Error(w, "Failed to serialize event", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(responseJSON)
 }

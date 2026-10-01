@@ -1963,3 +1963,32 @@ func TestHandleWebhook_FutureTimestampReplayProtectionCoversValidityWindow(t *te
 	assert.Equal(t, http.StatusCreated, rec.Code)
 	api.AssertExpectations(t)
 }
+
+func TestHandleWebhookBatch_ObjectPayloadContinuesAfterInvalidItem(t *testing.T) {
+	api := &plugintest.API{}
+	cfg := &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"}
+	p := newTestPlugin(t, api, cfg)
+
+	expectWebhookEventCreate(api, "aaaaaaaaaaaaaaaaaaaaaaaaaa")
+	body := `{"events":[{"title":"first","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"},{"message":"missing title","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook/batch", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusMultiStatus, rec.Code)
+	var resp BatchWebhookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Results, 2)
+	assert.Equal(t, 0, resp.Results[0].Index)
+	assert.Equal(t, http.StatusCreated, resp.Results[0].Status)
+	require.NotNil(t, resp.Results[0].Event)
+	assert.Equal(t, "first", resp.Results[0].Event.Title)
+	assert.Empty(t, resp.Results[0].Error)
+	assert.Equal(t, 1, resp.Results[1].Index)
+	assert.Equal(t, http.StatusBadRequest, resp.Results[1].Status)
+	assert.Nil(t, resp.Results[1].Event)
+	assert.Equal(t, "Title is required", resp.Results[1].Error)
+	api.AssertExpectations(t)
+}
