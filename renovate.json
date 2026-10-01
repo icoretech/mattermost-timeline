@@ -1,9 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "enabledManagers": ["github-actions", "npm", "gomod"],
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "npm",
+    "gomod"
+  ],
   "dependencyDashboard": true,
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "platformAutomerge": false,
   "prHourlyLimit": 0,
   "prConcurrentLimit": 10,
@@ -13,7 +21,9 @@
   "packageRules": [
     {
       "description": "Group Vite ecosystem updates",
-      "matchManagers": ["npm"],
+      "matchManagers": [
+        "npm"
+      ],
       "matchPackageNames": [
         "/^vite$/",
         "/^@vitejs\\//",
@@ -25,7 +35,9 @@
     },
     {
       "description": "Group Biome and TypeScript tooling",
-      "matchManagers": ["npm"],
+      "matchManagers": [
+        "npm"
+      ],
       "matchPackageNames": [
         "/^@biomejs\\//",
         "/^typescript$/"
@@ -35,7 +47,9 @@
     },
     {
       "description": "Group React ecosystem updates",
-      "matchManagers": ["npm"],
+      "matchManagers": [
+        "npm"
+      ],
       "matchPackageNames": [
         "/^react$/",
         "/^react-dom$/",
@@ -48,7 +62,9 @@
     },
     {
       "description": "Group Mattermost SDK updates",
-      "matchManagers": ["npm"],
+      "matchManagers": [
+        "npm"
+      ],
       "matchPackageNames": [
         "/^@mattermost\\//",
         "/^mattermost-/"
@@ -58,7 +74,9 @@
     },
     {
       "description": "Group Go Mattermost dependencies",
-      "matchManagers": ["gomod"],
+      "matchManagers": [
+        "gomod"
+      ],
       "matchPackageNames": [
         "/^github\\.com\\/mattermost\\//",
         "/^github\\.com\\/gorilla\\//",
@@ -69,7 +87,9 @@
     },
     {
       "description": "Group Go standard library updates",
-      "matchManagers": ["gomod"],
+      "matchManagers": [
+        "gomod"
+      ],
       "matchPackageNames": [
         "/^golang\\.org\\//",
         "/^google\\.golang\\.org\\//",
@@ -81,9 +101,20 @@
     },
     {
       "description": "Automerge non-major updates after checks pass",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "automerge": true,
       "automergeType": "pr"
     }
-  ]
+  ],
+  "semanticCommitType": "deps",
+  "semanticCommitScope": "",
+  "ignorePresets": [
+    ":semanticPrefixFixDepsChoreOthers"
+  ],
+  "semanticCommits": "enabled"
 }
