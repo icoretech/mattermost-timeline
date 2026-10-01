@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 var allowedSeverities = []string{"info", "warning", "critical"}
@@ -31,22 +32,22 @@ func validateWebhookPayload(payload WebhookPayload, links []EventLink) *webhookH
 	if strings.TrimSpace(payload.Title) == "" {
 		return &webhookHandlerError{message: "Title is required", status: http.StatusBadRequest}
 	}
-	if len(payload.Title) > maxWebhookTitleLength {
+	if utf8.RuneCountInString(payload.Title) > maxWebhookTitleLength {
 		return &webhookHandlerError{message: "title exceeds maximum length", status: http.StatusBadRequest}
 	}
-	if len(payload.Message) > maxWebhookMessageLength {
+	if utf8.RuneCountInString(payload.Message) > maxWebhookMessageLength {
 		return &webhookHandlerError{message: "message exceeds maximum length", status: http.StatusBadRequest}
 	}
-	if len(payload.Source) > maxWebhookSourceLength {
+	if utf8.RuneCountInString(payload.Source) > maxWebhookSourceLength {
 		return &webhookHandlerError{message: "source exceeds maximum length", status: http.StatusBadRequest}
 	}
-	if len(payload.ExternalID) > maxWebhookExternalIDLength {
+	if utf8.RuneCountInString(payload.ExternalID) > maxWebhookExternalIDLength {
 		return &webhookHandlerError{message: "external_id exceeds maximum length", status: http.StatusBadRequest}
 	}
-	if len(payload.EventType) > maxWebhookEventTypeLength {
+	if utf8.RuneCountInString(payload.EventType) > maxWebhookEventTypeLength {
 		return &webhookHandlerError{message: "event_type exceeds maximum length", status: http.StatusBadRequest}
 	}
-	if payload.Environment != nil && len(*payload.Environment) > maxWebhookEnvironmentLength {
+	if payload.Environment != nil && utf8.RuneCountInString(*payload.Environment) > maxWebhookEnvironmentLength {
 		return &webhookHandlerError{message: "environment exceeds maximum length", status: http.StatusBadRequest}
 	}
 	if len(links) > maxWebhookLinkCount {
@@ -88,11 +89,14 @@ func validateWebhookLink(link EventLink) *webhookHandlerError {
 	if strings.TrimSpace(link.URL) == "" {
 		return &webhookHandlerError{message: "link URL is required", status: http.StatusBadRequest}
 	}
-	if len(link.URL) > maxWebhookLinkURLLength {
+	if utf8.RuneCountInString(link.URL) > maxWebhookLinkURLLength {
 		return &webhookHandlerError{message: "link URL exceeds maximum length", status: http.StatusBadRequest}
 	}
-	if len(link.Label) > maxWebhookLinkLabelLength {
+	if utf8.RuneCountInString(link.Label) > maxWebhookLinkLabelLength {
 		return &webhookHandlerError{message: "link label exceeds maximum length", status: http.StatusBadRequest}
+	}
+	if containsControlCharacter(link.URL) {
+		return &webhookHandlerError{message: "link URL contains unsupported control characters", status: http.StatusBadRequest}
 	}
 	if containsControlCharacter(link.Label) {
 		return &webhookHandlerError{message: "link label contains unsupported control characters", status: http.StatusBadRequest}

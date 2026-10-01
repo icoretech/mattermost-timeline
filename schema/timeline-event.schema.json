@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/icoretech/mattermost-timeline/schema/timeline-event.schema.json",
+  "title": "Mattermost Timeline webhook event",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["title"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Timeline event title"
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 8000,
+      "description": "Event body; Markdown is supported"
+    },
+    "event_type": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Icon/category hint; defaults to generic when omitted"
+    },
+    "source": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "Short source label such as ci/cd or alertmanager"
+    },
+    "external_id": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Idempotency key used to update an existing event"
+    },
+    "links": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Labeled links. URLs may be relative or use http, https, mailto, or tel protocols; server validation is authoritative.",
+      "items": {
+        "$ref": "#/$defs/link"
+      }
+    },
+    "link": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Legacy single-link URL. Prefer links[]. URLs may be relative or use http, https, mailto, or tel protocols; server validation is authoritative."
+    },
+    "team_id": {
+      "type": "string",
+      "description": "Team ID or team name; can also be passed as ?team_id="
+    },
+    "channels": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Channel names or IDs; omit for team-wide events",
+      "items": {
+        "type": "string"
+      }
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"],
+      "description": "Optional triage severity metadata"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "running", "success", "failed", "resolved"],
+      "description": "Optional triage status metadata"
+    },
+    "environment": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "Short environment label such as production or staging"
+    },
+    "expires_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix millisecond timestamp used as presentation metadata only"
+    },
+    "pinned": {
+      "type": "boolean",
+      "description": "Whether the event should be treated as pinned/active in the UI"
+    },
+    "resolved_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix millisecond timestamp marking resolution metadata"
+    }
+  },
+  "$defs": {
+    "link": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Relative URL or http, https, mailto, or tel URL; server validation is authoritative for protocols."
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 80
+        }
+      }
+    }
+  }
+}

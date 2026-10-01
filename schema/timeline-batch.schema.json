@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/icoretech/mattermost-timeline/schema/timeline-batch.schema.json",
+  "title": "Mattermost Timeline batch webhook payload",
+  "oneOf": [
+    {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "$ref": "./timeline-event.schema.json"
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["events"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "./timeline-event.schema.json"
+          }
+        }
+      }
+    }
+  ]
+}
