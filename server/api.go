@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -83,6 +84,7 @@ type validatedWebhookRequest struct {
 	payload       WebhookPayload
 	eventType     string
 	incomingLinks []EventLink
+	credential    webhookCredential
 }
 
 type storedWebhookEvent struct {
@@ -175,7 +177,25 @@ func (p *Plugin) resolveWebhookChannelID(teamID, channelIdentifier string) (stri
 
 func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
-	validated, handlerErr := p.validateWebhookRequest(w, r, config)
+	body, handlerErr := readWebhookBody(w, r, maxWebhookBodyBytes)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	credential, handlerErr := p.authenticateWebhookRequest(r, body, config)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	payload, handlerErr := decodeWebhookPayload(body)
+	if handlerErr != nil {
+		http.Error(w, handlerErr.message, handlerErr.status)
+		return
+	}
+
+	validated, handlerErr := p.validateWebhookPayloadForRequest(r, payload, credential)
 	if handlerErr != nil {
 		http.Error(w, handlerErr.message, handlerErr.status)
 		return
@@ -188,72 +208,6 @@ func (p *Plugin) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.publishAndWriteTimelineEventResponse(w, stored.status, stored.eventName, stored.event)
-}
-
-func (p *Plugin) validateWebhookRequest(w http.ResponseWriter, r *http.Request, config *configuration) (validatedWebhookRequest, *webhookHandlerError) {
-	if config.WebhookSecret == "" {
-		return validatedWebhookRequest{}, &webhookHandlerError{message: "Webhook secret not configured", status: http.StatusInternalServerError}
-	}
-
-	secret := r.Header.Get("X-Webhook-Secret")
-	if secret != config.WebhookSecret {
-		return validatedWebhookRequest{}, &webhookHandlerError{message: "Invalid webhook secret", status: http.StatusUnauthorized}
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes)
-
-	var payload WebhookPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		if strings.Contains(err.Error(), "http: request body too large") {
-			return validatedWebhookRequest{}, &webhookHandlerError{message: "Payload too large", status: http.StatusRequestEntityTooLarge}
-		}
-		return validatedWebhookRequest{}, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
-	}
-
-	if payload.Title == "" {
-		return validatedWebhookRequest{}, &webhookHandlerError{message: "Title is required", status: http.StatusBadRequest}
-	}
-
-	teamIdentifier := r.URL.Query().Get("team_id")
-	if teamIdentifier == "" {
-		teamIdentifier = payload.TeamID
-	}
-	teamID, handlerErr := p.resolveWebhookTeamID(teamIdentifier)
-	if handlerErr != nil {
-		return validatedWebhookRequest{}, handlerErr
-	}
-	payload.TeamID = teamID
-
-	if payload.Severity != nil {
-		value := strings.ToLower(strings.TrimSpace(*payload.Severity))
-		payload.Severity = &value
-	}
-	if payload.Status != nil {
-		value := strings.ToLower(strings.TrimSpace(*payload.Status))
-		payload.Status = &value
-	}
-
-	eventType := payload.EventType
-	if eventType == "" {
-		eventType = "generic"
-	}
-
-	channelIDs, handlerErr := p.resolveWebhookChannelIDs(teamID, payload.Channels)
-	if handlerErr != nil {
-		return validatedWebhookRequest{}, handlerErr
-	}
-	payload.Channels = channelIDs
-	incomingLinks := normalizeLinks(payload)
-	if err := validateWebhookPayload(payload, incomingLinks); err != nil {
-		return validatedWebhookRequest{}, err
-	}
-
-	return validatedWebhookRequest{
-		teamID:        teamID,
-		payload:       payload,
-		eventType:     eventType,
-		incomingLinks: incomingLinks,
-	}, nil
 }
 
 func (p *Plugin) storeWebhookEvent(request validatedWebhookRequest) (storedWebhookEvent, *webhookHandlerError) {
@@ -273,6 +227,9 @@ func (p *Plugin) storeWebhookEvent(request validatedWebhookRequest) (storedWebho
 			if existing == nil {
 				p.API.LogError("External ID mapping points to missing event", "event_id", existingID)
 				return storedWebhookEvent{}, &webhookHandlerError{message: "Failed to get existing event", status: http.StatusInternalServerError}
+			}
+			if handlerErr := p.enforceWebhookCredentialScope(request.teamID, existing.Channels, request.credential); handlerErr != nil {
+				return storedWebhookEvent{}, handlerErr
 			}
 
 			oldChannels := applyWebhookUpdate(existing, request.payload, request.eventType, request.incomingLinks)
@@ -534,3 +491,113 @@ func applyWebhookMetadata(event *Event, payload WebhookPayload, now int64) {
 }
 
 func boolPtr(value bool) *bool { return &value }
+
+func readWebhookBody(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, *webhookHandlerError) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if strings.Contains(err.Error(), "http: request body too large") {
+			return nil, &webhookHandlerError{message: "Payload too large", status: http.StatusRequestEntityTooLarge}
+		}
+		return nil, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
+	}
+	return body, nil
+}
+
+func decodeWebhookPayload(body []byte) (WebhookPayload, *webhookHandlerError) {
+	var payload WebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return WebhookPayload{}, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest}
+	}
+	return payload, nil
+}
+
+func (p *Plugin) validateWebhookPayloadForRequest(r *http.Request, payload WebhookPayload, credential webhookCredential) (validatedWebhookRequest, *webhookHandlerError) {
+	teamIdentifier := r.URL.Query().Get("team_id")
+	if teamIdentifier == "" {
+		teamIdentifier = payload.TeamID
+	}
+	teamID, handlerErr := p.resolveWebhookTeamID(teamIdentifier)
+	if handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+	payload.TeamID = teamID
+
+	if payload.Severity != nil {
+		severity := strings.ToLower(strings.TrimSpace(*payload.Severity))
+		payload.Severity = &severity
+	}
+	if payload.Status != nil {
+		status := strings.ToLower(strings.TrimSpace(*payload.Status))
+		payload.Status = &status
+	}
+
+	eventType := payload.EventType
+	if eventType == "" {
+		eventType = "generic"
+	}
+
+	channelIDs, handlerErr := p.resolveWebhookChannelIDs(teamID, payload.Channels)
+	if handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+	payload.Channels = channelIDs
+
+	if !credential.Legacy && strings.TrimSpace(payload.Source) == "" && credential.Name != "" {
+		payload.Source = credential.Name
+	}
+
+	incomingLinks := normalizeLinks(payload)
+	if handlerErr := validateWebhookPayload(payload, incomingLinks); handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+	if handlerErr := p.enforceWebhookCredentialScope(teamID, channelIDs, credential); handlerErr != nil {
+		return validatedWebhookRequest{}, handlerErr
+	}
+
+	return validatedWebhookRequest{
+		teamID:        teamID,
+		payload:       payload,
+		eventType:     eventType,
+		incomingLinks: incomingLinks,
+		credential:    credential,
+	}, nil
+}
+
+func (p *Plugin) enforceWebhookCredentialScope(teamID string, payloadChannelIDs []string, credential webhookCredential) *webhookHandlerError {
+	if credential.Legacy {
+		return nil
+	}
+
+	if credential.Team != "" {
+		allowedTeamID, handlerErr := p.resolveWebhookTeamID(credential.Team)
+		if handlerErr != nil {
+			return handlerErr
+		}
+		if allowedTeamID != teamID {
+			return &webhookHandlerError{message: "Webhook token is not allowed for this team", status: http.StatusForbidden}
+		}
+	}
+
+	if len(credential.Channels) == 0 {
+		return nil
+	}
+	if len(payloadChannelIDs) == 0 {
+		return &webhookHandlerError{message: "Webhook token is not allowed to publish team-wide events", status: http.StatusForbidden}
+	}
+
+	allowedChannelIDs := make(map[string]struct{}, len(credential.Channels))
+	for _, channelIdentifier := range credential.Channels {
+		channelID, handlerErr := p.resolveWebhookChannelID(teamID, channelIdentifier)
+		if handlerErr != nil {
+			return handlerErr
+		}
+		allowedChannelIDs[channelID] = struct{}{}
+	}
+	for _, channelID := range payloadChannelIDs {
+		if _, ok := allowedChannelIDs[channelID]; !ok {
+			return &webhookHandlerError{message: "Webhook token is not allowed for one or more channels", status: http.StatusForbidden}
+		}
+	}
+	return nil
+}

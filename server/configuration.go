@@ -6,11 +6,14 @@ import (
 )
 
 type configuration struct {
-	WebhookSecret      string `json:"WebhookSecret"`
-	MaxEventsStored    string `json:"MaxEventsStored"`
-	MaxEventsDisplayed string `json:"MaxEventsDisplayed"`
-	TimelineOrder      string `json:"TimelineOrder"`
-	EnableReactions    bool   `json:"EnableReactions"`
+	WebhookSecret          string `json:"WebhookSecret"`
+	WebhookTokens          string `json:"WebhookTokens"`
+	RequireSignedWebhooks bool   `json:"RequireSignedWebhooks"`
+	WebhookTools           string `json:"WebhookTools"`
+	MaxEventsStored        string `json:"MaxEventsStored"`
+	MaxEventsDisplayed     string `json:"MaxEventsDisplayed"`
+	TimelineOrder          string `json:"TimelineOrder"`
+	EnableReactions        bool   `json:"EnableReactions"`
 }
 
 func (c *configuration) timelineOrder() TimelineOrder {

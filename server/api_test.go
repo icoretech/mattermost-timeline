@@ -1792,3 +1792,62 @@ func TestHandleWebhook_RejectsInvalidPayloadMetadataAndLinks(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleWebhook_TokenScopeRestrictions(t *testing.T) {
+	t.Run("team mismatch", func(t *testing.T) {
+		api := &plugintest.API{}
+		cfg := &configuration{WebhookTokens: `[{"name":"ci","secret":"token-secret","team":"allowed-team"}]`}
+		p := newTestPlugin(t, api, cfg)
+
+		api.On("GetTeamByName", "allowed-team").Return(&model.Team{Id: "bbbbbbbbbbbbbbbbbbbbbbbbbb", Name: "allowed-team"}, (*model.AppError)(nil))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+		req.Header.Set("X-Webhook-Secret", "token-secret")
+		rec := httptest.NewRecorder()
+
+		p.router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Webhook token is not allowed for this team")
+		api.AssertExpectations(t)
+	})
+
+	t.Run("channel-restricted token rejects team-wide payload", func(t *testing.T) {
+		api := &plugintest.API{}
+		cfg := &configuration{WebhookTokens: `[{"name":"ci","secret":"token-secret","channels":["town-square"]}]`}
+		p := newTestPlugin(t, api, cfg)
+
+		req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"title":"deploy","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
+		req.Header.Set("X-Webhook-Secret", "token-secret")
+		rec := httptest.NewRecorder()
+
+		p.router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Webhook token is not allowed to publish team-wide events")
+		api.AssertExpectations(t)
+	})
+}
+
+func TestHandleWebhook_TokenCannotUpdateEventOutsideItsChannelScope(t *testing.T) {
+	api := &plugintest.API{}
+	teamID := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	allowedChannel := "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	otherChannel := "cccccccccccccccccccccccccc"
+	config := &configuration{WebhookTokens: `[{"name":"sample-token","secret":"sample-secret","channels":["bbbbbbbbbbbbbbbbbbbbbbbbbb"]}]`}
+	p := newTestPlugin(t, api, config)
+	existing := Event{ID: "existing-event", TeamID: teamID, Title: "Other channel event", ExternalID: "sample-external-id", Channels: []string{otherChannel}}
+	data, err := json.Marshal(existing)
+	require.NoError(t, err)
+	api.On("GetChannel", allowedChannel).Return(&model.Channel{Id: allowedChannel, TeamId: teamID, Type: model.ChannelTypeOpen}, (*model.AppError)(nil)).Times(3)
+	api.On("KVGet", "ext_id:"+teamID+":sample-external-id").Return([]byte(existing.ID), (*model.AppError)(nil)).Once()
+	api.On("KVGet", eventKey(existing.ID)).Return(data, (*model.AppError)(nil)).Once()
+	payload := `{"title":"Changed event","team_id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","external_id":"sample-external-id","channels":["bbbbbbbbbbbbbbbbbbbbbbbbbb"]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Webhook-Secret", "sample-secret")
+	rec := httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	api.AssertNotCalled(t, "KVSet", mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "PublishWebSocketEvent", mock.Anything, mock.Anything, mock.Anything)
+	api.AssertExpectations(t)
+}
