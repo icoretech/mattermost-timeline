@@ -393,7 +393,7 @@ describe("fetchEvents", () => {
       (c: unknown[]) => (c[0] as { type: string }).type === RECEIVED_EVENTS,
     );
     expect(receivedAction).toBeDefined();
-    expect((receivedAction?.[0] as { append: boolean }).append).toBe(true);
+    expect(receivedAction?.[0]).toMatchObject({ append: true });
   });
 });
 

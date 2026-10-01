@@ -437,24 +437,6 @@ func (p *Plugin) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func eventVisibleInContext(event Event, teamID, channelID string) bool {
-	if event.TeamID != teamID {
-		return false
-	}
-	if channelID == "" {
-		return len(event.Channels) == 0
-	}
-	if len(event.Channels) == 0 {
-		return true
-	}
-	for _, eventChannelID := range event.Channels {
-		if eventChannelID == channelID {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *Plugin) handleMarkEventsRead(w http.ResponseWriter, r *http.Request) {
 	var payload markEventsReadRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
