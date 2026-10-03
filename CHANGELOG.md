@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.2](https://github.com/icoretech/mattermost-timeline/compare/v2.0.1...v2.0.2) (2026-10-03)
+
+
+### Dependencies
+
+* update dependency @types/node to v26.6.4 ([#197](https://github.com/icoretech/mattermost-timeline/issues/197)) ([2225ce7](https://github.com/icoretech/mattermost-timeline/commit/2225ce78510d97822aa488a837110f00dd514103))
+* update dependency lucide-react to v1.50.0 ([#194](https://github.com/icoretech/mattermost-timeline/issues/194)) ([e4ba0cc](https://github.com/icoretech/mattermost-timeline/commit/e4ba0cca1c7797cf803f02395fd94acef326c6b3))
+* update dependency lucide-react to v1.51.0 ([#199](https://github.com/icoretech/mattermost-timeline/issues/199)) ([5b002ae](https://github.com/icoretech/mattermost-timeline/commit/5b002aea7debace2d8c43e2c5ad22a38b606b893))
+
 ## [2.0.1](https://github.com/icoretech/mattermost-timeline/compare/v2.0.0...v2.0.1) (2026-10-01)
 
 
