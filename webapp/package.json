@@ -12,7 +12,7 @@
     "doctor": "react-doctor -y"
   },
   "dependencies": {
-    "lucide-react": "1.51.0",
+    "lucide-react": "1.52.0",
     "mattermost-redux": "11.9.0"
   },
   "devDependencies": {
