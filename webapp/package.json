@@ -33,7 +33,7 @@
     "vite": "8.3.2",
     "vite-plugin-css-injected-by-js": "5.0.2",
     "vitest": "5.0.3",
-    "react-doctor": "0.9.14"
+    "react-doctor": "0.9.17"
   },
   "allowScripts": {
     "@parcel/watcher@2.5.6": true,
