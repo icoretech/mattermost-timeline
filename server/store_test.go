@@ -1068,6 +1068,35 @@ func TestFilterEventsMatchesMetadataActivityQueryAndUnread(t *testing.T) {
 	}
 }
 
+func TestFilterEventsClosedStatusAndActivity(t *testing.T) {
+	now := int64(1_700_000_000_000)
+	events := []Event{
+		{ID: "open", Status: "open", Severity: "critical"},
+		{ID: "closed", Status: "closed", Severity: "critical"},
+		{ID: "resolved", Status: "resolved", Severity: "critical"},
+		{ID: "closed-pinned", Status: "closed", Pinned: true, ExpiresAt: now - 1},
+	}
+	for _, tt := range []struct {
+		name    string
+		filters EventFilterOptions
+		wantIDs []string
+	}{
+		{name: "closed is distinct from resolved", filters: EventFilterOptions{Status: "closed", Now: now}, wantIDs: []string{"closed", "closed-pinned"}},
+		{name: "critical closed events are history", filters: EventFilterOptions{Active: boolPtr(false), Now: now}, wantIDs: []string{"closed", "resolved"}},
+		{name: "pinning keeps closed events active", filters: EventFilterOptions{Active: boolPtr(true), Now: now}, wantIDs: []string{"open", "closed-pinned"}},
+		{name: "closed and active filters combine", filters: EventFilterOptions{Status: "closed", Active: boolPtr(true), Now: now}, wantIDs: []string{"closed-pinned"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered := filterEvents(events, tt.filters, nil)
+			ids := make([]string, 0, len(filtered))
+			for _, event := range filtered {
+				ids = append(ids, event.ID)
+			}
+			assert.Equal(t, tt.wantIDs, ids)
+		})
+	}
+}
+
 func TestGetAllEventsByChannelPreservesNewestFirstGlobalChannelMerge(t *testing.T) {
 	api := &plugintest.API{}
 	store := NewEventStore(api, 100)

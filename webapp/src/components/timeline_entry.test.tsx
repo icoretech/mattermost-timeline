@@ -364,6 +364,16 @@ describe("timeline event activity helpers", () => {
       false,
     ],
     ["open event is active", { status: "open" as const }, true],
+    [
+      "closed critical event is inactive",
+      { severity: "critical" as const, status: "closed" as const },
+      false,
+    ],
+    [
+      "pinned closed event remains active",
+      { pinned: true, status: "closed" as const },
+      true,
+    ],
     ["running event is active", { status: "running" as const }, true],
     ["critical event is active", { severity: "critical" as const }, true],
     ["plain info event is inactive", { severity: "info" as const }, false],

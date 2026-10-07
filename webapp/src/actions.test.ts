@@ -17,6 +17,7 @@ import {
   RECEIVED_EVENTS,
   RECEIVED_NEW_EVENT,
   RECEIVED_REACTION_UPDATED,
+  RECEIVED_UPDATED_EVENT,
   receivedNewEvent,
   refreshUnreadEvents,
   removeReaction,
@@ -278,6 +279,16 @@ describe("timeline event validation", () => {
 
   it("accepts the legacy minimal event shape", () => {
     expect(isEventEntry(minimalEvent)).toBe(true);
+  });
+
+  it("accepts closed events from the API and websocket updates", () => {
+    const event = { ...minimalEvent, status: "closed" };
+
+    expect(isEventEntry(event)).toBe(true);
+    expect(parseUpdatedEventWebSocket(JSON.stringify(event))).toEqual({
+      type: RECEIVED_UPDATED_EVENT,
+      event,
+    });
   });
 
   it("accepts events with every optional metadata field", () => {

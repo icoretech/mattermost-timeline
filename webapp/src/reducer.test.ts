@@ -41,6 +41,7 @@ describe("reducer", () => {
       total: 0,
       newEventIds: [],
       updatedEventIds: [],
+      websocketRevision: 0,
       unreadEventIdsByContext: {},
       timelineOrder: "oldest_first",
       enableReactions: true,
@@ -48,6 +49,28 @@ describe("reducer", () => {
       viewTeamId: "",
       viewChannelId: "",
     });
+  });
+
+  it("tracks repeated websocket updates independently of fetches and animation flags", () => {
+    const event = makeEvent();
+    const created = reducer(initial, { type: RECEIVED_NEW_EVENT, event });
+    const updated = reducer(created, { type: RECEIVED_UPDATED_EVENT, event });
+    const updatedAgain = reducer(updated, {
+      type: RECEIVED_UPDATED_EVENT,
+      event,
+    });
+
+    expect(created.websocketRevision).toBe(1);
+    expect(updated.websocketRevision).toBe(2);
+    expect(updatedAgain.websocketRevision).toBe(3);
+    expect(
+      reducer(updatedAgain, { type: RECEIVED_EVENTS, events: [], total: 0 })
+        .websocketRevision,
+    ).toBe(3);
+    expect(
+      reducer(updatedAgain, { type: CLEAR_NEW_EVENT_FLAG, eventId: event.id })
+        .websocketRevision,
+    ).toBe(3);
   });
 
   it("hydrates popout state and context", () => {

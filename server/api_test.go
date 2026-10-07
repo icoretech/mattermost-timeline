@@ -1635,6 +1635,60 @@ func TestHandleWebhook_ExternalID_UpdateExisting(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestHandleWebhook_ExternalID_StatusUpdate(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		statusJSON string
+		wantStatus string
+	}{
+		{name: "omitted status preserves open", wantStatus: "open"},
+		{name: "empty status clears open", statusJSON: `,"status":""`},
+		{name: "closed replaces open", statusJSON: `,"status":"closed"`, wantStatus: "closed"},
+		{name: "closed is normalized", statusJSON: `,"status":" CLOSED "`, wantStatus: "closed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			api := &plugintest.API{}
+			p := newTestPlugin(t, api, &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"})
+			const teamID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+			existing := Event{
+				ID: "evt-existing", TeamID: teamID, Title: "Feature improvement",
+				ExternalID: "change-42", Status: "open", Severity: "critical",
+			}
+			existingJSON, err := json.Marshal(existing)
+			require.NoError(t, err)
+			api.On("KVGet", "ext_id:"+teamID+":change-42").Return([]byte(existing.ID), (*model.AppError)(nil))
+			api.On("KVGet", "event:"+existing.ID).Return(existingJSON, (*model.AppError)(nil))
+			var storedJSON []byte
+			api.On("KVSet", "event:"+existing.ID, mock.AnythingOfType("[]uint8")).Run(func(args mock.Arguments) {
+				storedJSON = args.Get(1).([]byte)
+			}).Return((*model.AppError)(nil)).Once()
+			api.On("KVGet", "event_index:"+teamID).Return([]byte(`["evt-existing"]`), (*model.AppError)(nil))
+			api.On("KVCompareAndSet", "event_index:"+teamID, mock.Anything, []byte(`["evt-existing"]`)).Return(true, (*model.AppError)(nil))
+			var websocketJSON string
+			api.On("PublishWebSocketEvent", "updated_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast")).Run(func(args mock.Arguments) {
+				websocketJSON = args.Get(1).(map[string]interface{})["event"].(string)
+			}).Return().Once()
+
+			payload := `{"title":"Feature improvement","team_id":"` + teamID + `","external_id":"change-42"` + tt.statusJSON + `}`
+			req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+			req.Header.Set("X-Webhook-Secret", "s3cret")
+			rec := httptest.NewRecorder()
+			p.router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			for _, data := range [][]byte{rec.Body.Bytes(), storedJSON, []byte(websocketJSON)} {
+				var event ClientEvent
+				require.NoError(t, json.Unmarshal(data, &event))
+				assert.Equal(t, existing.ID, event.ID)
+				assert.Equal(t, tt.wantStatus, event.Status)
+				assert.Equal(t, "critical", event.Severity)
+				assert.Zero(t, event.ResolvedAt, "closing must not imply resolution")
+			}
+			api.AssertExpectations(t)
+		})
+	}
+}
+
 func TestHandleWebhook_ExternalID_LookupFailure(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{WebhookSecret: "s3cret"}

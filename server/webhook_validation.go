@@ -9,7 +9,7 @@ import (
 )
 
 var allowedSeverities = []string{"info", "warning", "critical"}
-var allowedStatuses = []string{"open", "running", "success", "failed", "resolved"}
+var allowedStatuses = []string{"open", "running", "success", "failed", "resolved", "closed"}
 
 const maxWebhookTitleLength = 200
 const maxWebhookMessageLength = 8000

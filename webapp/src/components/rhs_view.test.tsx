@@ -2,11 +2,24 @@ import type { GlobalState } from "@mattermost/types/store";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Provider } from "react-redux";
-import type { Store } from "redux";
+import {
+  applyMiddleware,
+  createStore,
+  type Middleware,
+  type Store,
+} from "redux";
 import { vi } from "vitest";
 
-import { CLEAR_EVENTS, MARK_EVENTS_READ, SET_ERROR } from "../actions";
+import {
+  CLEAR_EVENTS,
+  type EventFeedAction,
+  MARK_EVENTS_READ,
+  receivedUpdatedEvent,
+  SET_ERROR,
+} from "../actions";
 import manifest from "../manifest";
+import reducer from "../reducer";
+import { isEventFeedState } from "../timeline_validation";
 import type { EventEntry, EventFeedState } from "../types/timeline";
 import RHSView from "./rhs_view";
 
@@ -172,6 +185,7 @@ async function cleanup(root: Root, container: HTMLElement) {
 
 describe("RHSView", () => {
   beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ events: [], total: 0 }),
@@ -180,6 +194,7 @@ describe("RHSView", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     document.body.replaceChildren();
     window.WebappUtils = undefined;
   });
@@ -264,6 +279,118 @@ describe("RHSView", () => {
       expect(control.disabled).toBe(false);
     }
 
+    await cleanup(root, container);
+  });
+
+  it("fetches closed events when the closed status filter is selected", async () => {
+    const { actions, container, root } = await renderRHS(makeState());
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(".event-feed-filter-toggle")
+        ?.click();
+    });
+    const status = container.querySelector<HTMLSelectElement>("#status-filter");
+    expect(status?.querySelector('option[value="closed"]')).not.toBeNull();
+    actions.length = 0;
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      if (status) {
+        status.value = "closed";
+        status.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(actions).toContainEqual({ type: CLEAR_EVENTS });
+    const filterURL = String(
+      vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0],
+    );
+    expect(filterURL).toContain("offset=0");
+    expect(filterURL).toContain("status=closed");
+    await cleanup(root, container);
+  });
+
+  it("refetches active filters when a closed item is unpinned by websocket", async () => {
+    const pinned = {
+      ...makeEvent("closed"),
+      status: "closed" as const,
+      pinned: true,
+    };
+    let serverEvents = [pinned];
+    globalThis.fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            events: serverEvents,
+            total: serverEvents.length,
+          }),
+        ),
+    );
+    const pluginKey = `plugins-${manifest.id}`;
+    const thunk: Middleware<Record<string, never>, TestState> =
+      (api) => (next) => (action) =>
+        typeof action === "function"
+          ? action(api.dispatch, api.getState)
+          : next(action);
+    const store = createStore(
+      (state: TestState = makeState(), action: EventFeedAction) => {
+        const pluginState = state[pluginKey];
+        return {
+          ...state,
+          [pluginKey]: reducer(
+            isEventFeedState(pluginState) ? pluginState : undefined,
+            action,
+          ),
+        };
+      },
+      applyMiddleware(thunk),
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <Provider store={store}>
+          <RHSView />
+        </Provider>,
+      );
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(".event-feed-filter-toggle")
+        ?.click();
+    });
+    await act(async () => {
+      const status =
+        container.querySelector<HTMLSelectElement>("#status-filter");
+      if (status) {
+        status.value = "closed";
+        status.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>(
+          ".event-feed-filter-chip",
+        ),
+      )
+        .find((button) => button.textContent === "Active")
+        ?.click();
+    });
+    expect(eventTitles(container)).toEqual(["event closed"]);
+    vi.mocked(globalThis.fetch).mockClear();
+    serverEvents = [];
+
+    await act(async () => {
+      store.dispatch(receivedUpdatedEvent({ ...pinned, pinned: false }));
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("status=closed"),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0][0])).toContain(
+      "active=true",
+    );
+    expect(eventTitles(container)).toEqual([]);
     await cleanup(root, container);
   });
 
@@ -352,45 +479,52 @@ describe("RHSView", () => {
     await cleanup(newest.root, newest.container);
   });
 
-  it("groups active and history events only when both groups exist", async () => {
-    const active = { ...makeEvent("active"), status: "open" as const };
-    const history = { ...makeEvent("history"), status: "success" as const };
-    const both = await renderRHS(
-      makeState({
-        pluginState: makePluginState({
-          events: [history, active],
-          total: 2,
-          timelineOrder: "newest_first",
+  it.each(["success", "closed"] as const)(
+    "groups %s critical events in history",
+    async (status) => {
+      const active = { ...makeEvent("active"), status: "open" as const };
+      const history = {
+        ...makeEvent("history"),
+        status,
+        severity: "critical" as const,
+      };
+      const both = await renderRHS(
+        makeState({
+          pluginState: makePluginState({
+            events: [history, active],
+            total: 2,
+            timelineOrder: "newest_first",
+          }),
         }),
-      }),
-    );
+      );
 
-    expect(
-      Array.from(
-        both.container.querySelectorAll(".event-feed-section-heading"),
-      ).map((element) => element.textContent),
-    ).toEqual(["Active", "History"]);
-    expect(eventTitles(both.container)).toEqual([
-      "event active",
-      "event history",
-    ]);
-    await cleanup(both.root, both.container);
+      expect(
+        Array.from(
+          both.container.querySelectorAll(".event-feed-section-heading"),
+        ).map((element) => element.textContent),
+      ).toEqual(["Active", "History"]);
+      expect(eventTitles(both.container)).toEqual([
+        "event active",
+        "event history",
+      ]);
+      await cleanup(both.root, both.container);
 
-    const onlyHistory = await renderRHS(
-      makeState({
-        pluginState: makePluginState({
-          events: [history],
-          total: 1,
-          timelineOrder: "newest_first",
+      const onlyHistory = await renderRHS(
+        makeState({
+          pluginState: makePluginState({
+            events: [history],
+            total: 1,
+            timelineOrder: "newest_first",
+          }),
         }),
-      }),
-    );
-    expect(
-      onlyHistory.container.querySelector(".event-feed-section-heading"),
-    ).toBeNull();
-    expect(eventTitles(onlyHistory.container)).toEqual(["event history"]);
-    await cleanup(onlyHistory.root, onlyHistory.container);
-  });
+      );
+      expect(
+        onlyHistory.container.querySelector(".event-feed-section-heading"),
+      ).toBeNull();
+      expect(eventTitles(onlyHistory.container)).toEqual(["event history"]);
+      await cleanup(onlyHistory.root, onlyHistory.container);
+    },
+  );
 
   it("threads timestamp display preferences into timeline entries", async () => {
     const state = makeState({

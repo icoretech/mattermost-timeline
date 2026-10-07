@@ -91,14 +91,14 @@ Use **Search timeline** to search titles, messages, sources, external IDs, event
 | --- | --- |
 | Event type, source, environment | The exact value, ignoring letter case |
 | Severity | `info`, `warning`, `critical` |
-| Status | `open`, `running`, `success`, `failed`, `resolved` |
+| Status | `open`, `running`, `success`, `failed`, `resolved`, `closed` |
 | Pinned | Events whose sender set `pinned: true` |
 | Active | Pinned events, or unexpired non-terminal events that are open, running or critical |
 | Unread | Events not yet marked read in the current team/channel context |
 
-Filtering happens before pagination, so matches can come from older events as well as the first page. Loading more keeps the selected filters. Opening the feed marks the returned visible events read.
+Filtering happens before pagination, so matches can come from older events as well as the first page. Loading more keeps the selected filters. Filtered results refresh when webhook events are created or updated. Opening the feed marks the returned visible events read.
 
-When the feed contains both active and historical events, **Active** appears before **History**. The configured timeline order applies within each group. A pinned event stays active even after expiry or resolution; its sender must unset `pinned` to move it to History.
+When the feed contains both active and historical events, **Active** appears before **History**. The configured timeline order applies within each group. `success`, `failed`, `resolved`, and `closed` are terminal statuses and appear in History, even at critical severity. A pinned event stays active even after expiry, resolution, or closure; its sender must unset `pinned` to move it to History. The Status filter matches each status separately, so `closed` does not include `resolved` events.
 
 Your integration controls operational state through webhook fields. The sidebar displays those values; it does not provide an incident-management workflow. `expires_at` is presentation metadata, not a deletion timer: expired events remain searchable until normal retention removes them.
 
@@ -147,7 +147,7 @@ Use `external_id` when an external system has a stable event ID. A later webhook
 }
 ```
 
-Existing links are preserved and new links are added once per URL. Omitted operational metadata is retained; explicit `false` or `0` values clear pinning and timestamps. Setting `status` to `resolved` records `resolved_at` automatically unless a timestamp is supplied. A scoped token can only update an existing event when its current channels also fall within the token's permissions.
+Existing links are preserved and new links are added once per URL. Omitted operational metadata is retained; explicit `false` or `0` values clear pinning and timestamps. Sending `status: ""` clears the status; omitting `status` retains its existing value. Setting `status` to `resolved` records `resolved_at` automatically unless a timestamp is supplied. Setting `status` to `closed` marks the same event closed without implying resolution or automatically recording `resolved_at`; existing resolution metadata is retained unless explicitly cleared with `resolved_at: 0`. Reuse the same `external_id` to update the event instead of creating another timeline item. A scoped token can only update an existing event when its current channels also fall within the token's permissions.
 
 ## How it works
 
@@ -205,7 +205,7 @@ X-Timeline-Signature: sha256=<hex-hmac>
 | `team_id`     | string  | no       | Team ID or team name; can also be passed as `?team_id=`                   |
 | `channels`    | array   | no       | Channel names or IDs; omit for team-wide events                           |
 | `severity`    | string  | no       | Triage severity: `info`, `warning`, or `critical`                         |
-| `status`      | string  | no       | Triage status: `open`, `running`, `success`, `failed`, or `resolved`       |
+| `status`      | string  | no       | Triage status: `open`, `running`, `success`, `failed`, `resolved`, or `closed`; `""` clears it |
 | `environment` | string  | no       | Short environment label, such as `production`, `staging`, or `test`       |
 | `expires_at`  | integer | no       | Unix millisecond timestamp used as presentation metadata only             |
 | `pinned`      | boolean | no       | Pin the event into the active group                                       |

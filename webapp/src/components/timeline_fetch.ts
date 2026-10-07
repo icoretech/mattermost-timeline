@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Dispatch } from "redux";
 
 import type { EventFetchFilters } from "../actions";
@@ -13,6 +13,7 @@ type TimelineFetchArgs = {
   currentTeamId: string;
   dispatch: TimelineFetchDispatch;
   eventFilters: EventFetchFilters;
+  eventRevision: number;
   filterSignature: string;
   initialScrolledContextRef: MutableRefObject<{
     teamId: string;
@@ -27,11 +28,14 @@ export function useTimelineFetch({
   currentTeamId,
   dispatch,
   eventFilters,
+  eventRevision,
   filterSignature,
   initialScrolledContextRef,
   lastFilterSignatureRef,
   loadedContextRef,
 }: TimelineFetchArgs) {
+  const lastEventRevisionRef = useRef(eventRevision);
+
   useEffect(() => {
     if (!currentTeamId) return undefined;
 
@@ -40,12 +44,16 @@ export function useTimelineFetch({
       loadedContextRef.current.teamId === currentTeamId &&
       loadedContextRef.current.channelId === (currentChannelId || "");
     const sameFilters = lastFilterSignatureRef.current === filterSignature;
+    const sameEvents = lastEventRevisionRef.current === eventRevision;
 
     if (!sameContext || !sameFilters) {
       initialScrolledContextRef.current = { teamId: "", channelId: "" };
+    }
+    if (!sameContext || !sameFilters || !sameEvents) {
       dispatch(clearEvents());
     }
     lastFilterSignatureRef.current = filterSignature;
+    lastEventRevisionRef.current = eventRevision;
 
     dispatch(
       fetchEvents(currentTeamId, {
@@ -61,6 +69,7 @@ export function useTimelineFetch({
     currentTeamId,
     currentChannelId,
     eventFilters,
+    eventRevision,
     filterSignature,
     initialScrolledContextRef,
     lastFilterSignatureRef,

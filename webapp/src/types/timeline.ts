@@ -19,6 +19,7 @@ export const TIMELINE_STATUSES = [
   "success",
   "failed",
   "resolved",
+  "closed",
 ] as const;
 
 export type TimelineSeverity = (typeof TIMELINE_SEVERITIES)[number];
@@ -60,6 +61,7 @@ export interface EventFeedState {
   total: number;
   newEventIds: string[];
   updatedEventIds: string[];
+  websocketRevision?: number;
   unreadEventIdsByContext: TimelineUnreadState;
   timelineOrder: "oldest_first" | "newest_first";
   enableReactions: boolean;

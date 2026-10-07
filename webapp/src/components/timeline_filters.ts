@@ -1,15 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useMemo, useState } from "react";
 import type { EventFetchFilters } from "../actions";
+import type { TimelineStatus } from "../types/timeline";
 
 export type TimelineSeverityFilter = "" | "info" | "warning" | "critical";
-export type TimelineStatusFilter =
-  | ""
-  | "open"
-  | "running"
-  | "success"
-  | "failed"
-  | "resolved";
+export type TimelineStatusFilter = "" | TimelineStatus;
 
 export type TimelineFilterState = {
   searchQuery: string;

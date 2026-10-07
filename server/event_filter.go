@@ -89,7 +89,7 @@ func eventIsExpired(event Event, now int64) bool {
 
 func eventIsTerminalStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "success", "failed", "resolved":
+	case "success", "failed", "resolved", "closed":
 		return true
 	default:
 		return false

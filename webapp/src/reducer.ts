@@ -20,7 +20,11 @@ import {
   SET_VIEW_CONTEXT,
 } from "./actions";
 import { getTimelineContextKey } from "./selectors";
-import type { EventEntry, TimelineUnreadState } from "./types/timeline";
+import type {
+  EventEntry,
+  EventFeedState,
+  TimelineUnreadState,
+} from "./types/timeline";
 
 function dedupeIds(ids: string[]): string[] {
   return Array.from(new Set(ids));
@@ -237,6 +241,19 @@ function updatedEventIds(
   }
 }
 
+function websocketRevision(
+  state: number | undefined = 0,
+  action: EventFeedAction,
+): number {
+  switch (action.type) {
+    case RECEIVED_NEW_EVENT:
+    case RECEIVED_UPDATED_EVENT:
+      return state + 1;
+    default:
+      return state;
+  }
+}
+
 function unreadEventIdsByContext(
   state: TimelineUnreadState = {},
   action: EventFeedAction,
@@ -371,6 +388,7 @@ const eventFeedReducer = combineReducers({
   total,
   newEventIds,
   updatedEventIds,
+  websocketRevision,
   unreadEventIdsByContext,
   timelineOrder,
   enableReactions,
@@ -379,15 +397,24 @@ const eventFeedReducer = combineReducers({
   viewChannelId,
 });
 
+function hasWebsocketRevision(
+  state: EventFeedState,
+): state is ReturnType<typeof eventFeedReducer> {
+  return state.websocketRevision !== undefined;
+}
+
 export default function reducer(
-  state: ReturnType<typeof eventFeedReducer> | undefined,
+  state: EventFeedState | undefined,
   action: EventFeedAction,
-): ReturnType<typeof eventFeedReducer> {
+): EventFeedState {
   if (action.type === RECEIVED_NEW_EVENT) {
     if (state?.events.some((event) => event.id === action.event.id)) {
       return state;
     }
   }
 
-  return eventFeedReducer(state, action);
+  if (!state || hasWebsocketRevision(state)) {
+    return eventFeedReducer(state, action);
+  }
+  return eventFeedReducer({ ...state, websocketRevision: 0 }, action);
 }

@@ -1,5 +1,6 @@
 import React from "react";
 
+import { TIMELINE_STATUSES } from "../types/timeline";
 import type {
   TimelineFilterSetters,
   TimelineFilterState,
@@ -129,11 +130,11 @@ export default function TimelineFilterToolbar({
             }
           >
             <option value="">{"Status"}</option>
-            <option value="open">{"open"}</option>
-            <option value="running">{"running"}</option>
-            <option value="success">{"success"}</option>
-            <option value="failed">{"failed"}</option>
-            <option value="resolved">{"resolved"}</option>
+            {TIMELINE_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
           </select>
           <button
             type="button"

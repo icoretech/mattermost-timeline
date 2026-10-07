@@ -130,6 +130,8 @@ export function isEventFeedState(value: unknown): value is EventFeedState {
     typeof value.total === "number" &&
     isStringArray(value.newEventIds) &&
     isStringArray(value.updatedEventIds) &&
+    (value.websocketRevision === undefined ||
+      isFiniteNumber(value.websocketRevision)) &&
     (value.unreadEventIdsByContext === undefined ||
       isTimelineUnreadState(value.unreadEventIdsByContext)) &&
     isTimelineOrder(value.timelineOrder) &&

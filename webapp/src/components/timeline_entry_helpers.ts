@@ -99,7 +99,9 @@ export function isTimelineEventExpired(
 }
 
 function hasTimelineTerminalStatus(event: EventEntry): boolean {
-  return ["success", "failed", "resolved"].includes(event.status || "");
+  return ["success", "failed", "resolved", "closed"].includes(
+    event.status || "",
+  );
 }
 
 export function isTimelineEventActive(
