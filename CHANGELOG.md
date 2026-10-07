@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.0.2](https://github.com/icoretech/mattermost-timeline/compare/v2.0.1...v2.0.2) (2026-10-07)
+
+
+### Features
+
+* **events:** support closed terminal webhook status ([34f5e0f](https://github.com/icoretech/mattermost-timeline/commit/34f5e0fefde0f64e62b42b1da6d5853eae046601))
+
+
+### Dependencies
+
+* update dependency @types/node to v26.6.4 ([#197](https://github.com/icoretech/mattermost-timeline/issues/197)) ([2225ce7](https://github.com/icoretech/mattermost-timeline/commit/2225ce78510d97822aa488a837110f00dd514103))
+* update dependency @vitejs/plugin-react to v6.1.2 ([#202](https://github.com/icoretech/mattermost-timeline/issues/202)) ([163fdd0](https://github.com/icoretech/mattermost-timeline/commit/163fdd0042df9e1617693286000134a1bf0b1a6a))
+* update dependency jsdom to v30.1.2 ([6cfd494](https://github.com/icoretech/mattermost-timeline/commit/6cfd494f921cfdb45933756e7458abffd69f1359))
+* update dependency lucide-react to v1.50.0 ([#194](https://github.com/icoretech/mattermost-timeline/issues/194)) ([e4ba0cc](https://github.com/icoretech/mattermost-timeline/commit/e4ba0cca1c7797cf803f02395fd94acef326c6b3))
+* update dependency lucide-react to v1.51.0 ([#199](https://github.com/icoretech/mattermost-timeline/issues/199)) ([5b002ae](https://github.com/icoretech/mattermost-timeline/commit/5b002aea7debace2d8c43e2c5ad22a38b606b893))
+* update dependency lucide-react to v1.52.0 ([7319daf](https://github.com/icoretech/mattermost-timeline/commit/7319daffc5fd6cb7e93b7a00e5b80d2cae7a5632))
+* update dependency react-doctor to v0.9.17 ([#201](https://github.com/icoretech/mattermost-timeline/issues/201)) ([c6e2c9d](https://github.com/icoretech/mattermost-timeline/commit/c6e2c9df5909e675ec7e301c301f053e3a6ce346))
+* update dependency vite to v8.3.3 ([#203](https://github.com/icoretech/mattermost-timeline/issues/203)) ([8068a17](https://github.com/icoretech/mattermost-timeline/commit/8068a17d105ab93c30d6e156d85221366cc7b247))
+
+
+### Miscellaneous Chores
+
+* release 2.0.2 ([507a8dc](https://github.com/icoretech/mattermost-timeline/commit/507a8dc5334ca3a1db2d8b43d4cb47cccd527bce))
+
 ## [2.0.1](https://github.com/icoretech/mattermost-timeline/compare/v2.0.0...v2.0.1) (2026-10-01)
 
 
