@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.0](https://github.com/icoretech/mattermost-timeline/compare/v2.0.2...v2.1.0) (2026-10-08)
+
+
+### Features
+
+* **events:** support ordered custom webhook fields ([8650096](https://github.com/icoretech/mattermost-timeline/commit/86500965e78b92bc341bbf92d6d059ba6e334d28))
+* **i18n:** localize events and plugin settings in seven languages ([ec5db23](https://github.com/icoretech/mattermost-timeline/commit/ec5db23341f10d3d4d2bfc25e594fa12a00cd257))
+
+
+### Bug Fixes
+
+* **deps:** update source-map-js to 1.2.2 ([190fcd4](https://github.com/icoretech/mattermost-timeline/commit/190fcd47da5378c9d063456a2055a2b8d6da8a75))
+
+
+### Dependencies
+
+* update dependency lucide-react to v1.53.0 ([017d396](https://github.com/icoretech/mattermost-timeline/commit/017d3967f0f204a3462190bb935c2f70acc78da7))
+
 ## [2.0.2](https://github.com/icoretech/mattermost-timeline/compare/v2.0.1...v2.0.2) (2026-10-07)
 
 
