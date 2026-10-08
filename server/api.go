@@ -427,6 +427,9 @@ func newWebhookEvent(teamID string, payload WebhookPayload, eventType string, in
 }
 
 func applyWebhookMetadata(event *Event, payload WebhookPayload, now int64) {
+	if payload.CustomFields != nil {
+		event.CustomFields = payload.CustomFields
+	}
 	if payload.Severity != nil {
 		event.Severity = *payload.Severity
 	}

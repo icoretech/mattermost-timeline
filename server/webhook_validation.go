@@ -82,7 +82,7 @@ func validateWebhookPayload(payload WebhookPayload, links []EventLink) *webhookH
 			return handlerErr
 		}
 	}
-	return nil
+	return validateCustomFields(payload.CustomFields)
 }
 
 func validateWebhookLink(link EventLink) *webhookHandlerError {

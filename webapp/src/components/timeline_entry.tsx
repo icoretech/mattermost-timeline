@@ -22,6 +22,7 @@ import {
 import React, { useCallback } from "react";
 import type { TimestampDisplayPreferences } from "../selectors";
 import type { EventEntry, EventLink, TimelineUser } from "../types/timeline";
+import { CustomFields } from "./custom_fields";
 import ReactionBar from "./reaction_bar";
 import {
   formatTimestamp,
@@ -203,6 +204,7 @@ const TimelineEntry: React.FC<Props> = ({
             <TimelineMarkdown text={event.message} />
           </div>
         )}
+        <CustomFields fields={event.custom_fields} />
         {links.length > 0 && (
           <div className="timeline-entry__links">
             {links.map((l: EventLink) =>

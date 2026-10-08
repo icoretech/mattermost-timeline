@@ -200,6 +200,7 @@ X-Timeline-Signature: sha256=<hex-hmac>
 | `event_type`  | string  | no       | Icon/category hint; defaults to `generic`                                 |
 | `source`      | string  | no       | Short source label, such as `ci/cd`, `alertmanager`, or `stripe`          |
 | `external_id` | string  | no       | Idempotency key for updating an existing event                            |
+| `custom_fields` | array | no       | Ordered integration-specific fields; see [Custom fields](#custom-fields) |
 | `links`       | array   | no       | Labeled links: `{ "label": "Dashboard", "url": "https://..." }`     |
 | `link`        | string  | no       | Legacy single-link field; prefer `links`                                  |
 | `team_id`     | string  | no       | Team ID or team name; can also be passed as `?team_id=`                   |
@@ -212,6 +213,23 @@ X-Timeline-Signature: sha256=<hex-hmac>
 | `resolved_at` | integer | no       | Unix millisecond timestamp marking resolution metadata                    |
 
 Supported event types: `host_online`, `host_offline`, `deploy`, `alert`, `error`, `info`, `success`, `money_in`, `money_out`, `security`, `incident`, `user_joined`, `user_left`, `scheduled`, `review`, `message`, and `generic`. Custom event types are accepted and render with the generic fallback icon.
+
+### Custom fields
+
+Use `custom_fields` for integration-specific details such as a merge state, build number or approval flag. Fields appear in the supplied order below the message and above links and reactions. Names, labels and values render as plain text, without Markdown or automatic links.
+
+Each field has a required `name` and `value`, plus an optional `label` and `type`:
+
+| Property | Accepted value |
+| --- | --- |
+| `name` | Unique, nonblank string of up to 64 characters |
+| `value` | String of up to 1,000 characters, finite JSON number, or boolean |
+| `label` | Optional string of up to 80 characters; omitted or empty labels display the name |
+| `type` | Optional `string`, `number`, or `boolean`; must match the JSON value's type, which is inferred when omitted |
+
+An event accepts up to 20 fields. Character limits count Unicode code points. Names, labels and string values cannot contain control characters. Objects, arrays and `null` are not field values.
+
+When updating an event with the same `external_id`, omitting `custom_fields` or sending `null` retains its fields. A supplied array replaces the complete list; `[]` clears it. Updates still require `title`. Custom fields do not change built-in `status`, `pinned` or `environment` values or their filtering and grouping behavior.
 
 ### Signed webhooks
 
@@ -307,6 +325,35 @@ curl -X POST "$MATTERMOST_URL/plugins/ch.icorete.mattermost-timeline/webhook?tea
       -H "X-Timeline-Signature: sha256=$signature" \
       -d "$body"
 ```
+
+### GitLab merge request state
+
+Send the GitLab merge state as a custom field; no new built-in `merged` status is needed. For example, post this payload when a merge request is merged:
+
+```json
+{
+    "title": "Merge request !42 merged",
+    "event_type": "review",
+    "source": "gitlab",
+    "external_id": "gitlab-example-org-sample-app-mr-42",
+    "custom_fields": [
+        {
+            "name": "merge_status",
+            "label": "Merge status",
+            "type": "string",
+            "value": "merged"
+        }
+    ],
+    "links": [
+        {
+            "label": "Merge request",
+            "url": "https://gitlab.example.com/example-org/sample-app/-/merge_requests/42"
+        }
+    ]
+}
+```
+
+Use the same `external_id` for earlier states such as `opened`, changing the title and field value for each update. The existing timeline item updates in place. Set a built-in `status` separately if the event also needs Active/History grouping, for example `closed` after merging.
 
 ### Drone or Woodpecker
 

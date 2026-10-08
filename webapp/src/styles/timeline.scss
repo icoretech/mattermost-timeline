@@ -263,6 +263,32 @@
     word-break: break-word;
   }
 
+  &__custom-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 4px 8px;
+    margin: 8px 0;
+    font-size: 12px;
+    line-height: 1.4;
+
+    dt,
+    dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    dt {
+      color: rgba(var(--center-channel-color-rgb), 0.72);
+      font-weight: 600;
+    }
+
+    dd {
+      color: rgba(var(--center-channel-color-rgb), 0.88);
+      font-weight: 400;
+    }
+  }
+
   &__md-link {
     color: rgba(var(--button-bg-rgb, 28, 88, 217), 1);
     text-decoration: none;

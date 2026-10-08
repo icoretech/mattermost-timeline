@@ -1,4 +1,5 @@
 import {
+  type EventCustomField,
   type EventEntry,
   type EventFeedState,
   type ReactionClientSummary,
@@ -85,6 +86,41 @@ export function isReactionSummaryMap(
   return Object.values(value).every(isReactionSummary);
 }
 
+function isCustomFieldText(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === "string" &&
+    [...value].length <= maxLength &&
+    !/\p{Cc}/u.test(value)
+  );
+}
+
+function isCustomField(value: unknown): value is EventCustomField {
+  if (
+    !isRecord(value) ||
+    !isCustomFieldText(value.name, 64) ||
+    value.name.trim().length === 0 ||
+    (value.label !== undefined && !isCustomFieldText(value.label, 80)) ||
+    (value.type !== undefined && value.type !== typeof value.value)
+  ) {
+    return false;
+  }
+
+  return (
+    isCustomFieldText(value.value, 1000) ||
+    isFiniteNumber(value.value) ||
+    typeof value.value === "boolean"
+  );
+}
+
+function isCustomFields(value: unknown): value is readonly EventCustomField[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= 20 &&
+    value.every(isCustomField) &&
+    new Set(value.map((field) => field.name)).size === value.length
+  );
+}
+
 export function isEventEntry(value: unknown): value is EventEntry {
   if (!isRecord(value)) {
     return false;
@@ -111,6 +147,8 @@ export function isEventEntry(value: unknown): value is EventEntry {
     (value.expires_at === undefined || isFiniteNumber(value.expires_at)) &&
     (value.pinned === undefined || typeof value.pinned === "boolean") &&
     (value.resolved_at === undefined || isFiniteNumber(value.resolved_at)) &&
+    (value.custom_fields === undefined ||
+      isCustomFields(value.custom_fields)) &&
     (value.client_reactions === undefined ||
       isReactionSummaryMap(value.client_reactions)) &&
     (value.channels === undefined || isStringArray(value.channels))

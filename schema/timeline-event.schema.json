@@ -85,9 +85,65 @@
       "type": "integer",
       "minimum": 0,
       "description": "Unix millisecond timestamp marking resolution metadata"
+    },
+    "custom_fields": {
+      "type": ["array", "null"],
+      "maxItems": 20,
+      "description": "Ordered display-only fields with unique names (enforced by the server). Omitted or null preserves existing fields on update; an array replaces them and [] clears them.",
+      "items": { "$ref": "#/$defs/customField" }
     }
   },
   "$defs": {
+    "customField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "allOf": [
+            { "pattern": "\\S" },
+            { "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$" }
+          ]
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 80,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "boolean"]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 1000,
+              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+            },
+            { "type": "number", "minimum": -1.7976931348623157e308, "maximum": 1.7976931348623157e308 },
+            { "type": "boolean" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "string" } } },
+          "then": { "properties": { "value": { "type": "string" } } }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "number" } } },
+          "then": { "properties": { "value": { "type": "number" } } }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "boolean" } } },
+          "then": { "properties": { "value": { "type": "boolean" } } }
+        }
+      ]
+    },
     "link": {
       "type": "object",
       "additionalProperties": true,

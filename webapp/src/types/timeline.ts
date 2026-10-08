@@ -6,6 +6,15 @@ export interface EventLink {
   label?: string;
 }
 
+export type EventCustomField = {
+  readonly name: string;
+  readonly label?: string;
+} & (
+  | { readonly type?: "string"; readonly value: string }
+  | { readonly type?: "number"; readonly value: number }
+  | { readonly type?: "boolean"; readonly value: boolean }
+);
+
 export interface ReactionClientSummary {
   count: number;
   self: boolean;
@@ -42,6 +51,7 @@ export interface EventEntry {
   expires_at?: number;
   pinned?: boolean;
   resolved_at?: number;
+  custom_fields?: readonly EventCustomField[];
   client_reactions?: Record<string, ReactionClientSummary>;
   channels?: string[];
 }
