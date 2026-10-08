@@ -42,7 +42,7 @@ The script:
 3. creates the first admin through `POST /api/v4/users` when login fails
 4. logs in through `POST /api/v4/users/login`
 5. creates the `example-org` team if missing
-6. prints the exact `make deploy` and smoke-test commands
+6. prints the `make deploy` and smoke-test commands without printing passwords or webhook secrets; export existing credential variables before deployment
 
 Override these env vars only when needed:
 
@@ -117,6 +117,7 @@ TIMELINE_ENVIRONMENT=staging
 TIMELINE_PINNED=true
 TIMELINE_EXPIRES_AT=0
 TIMELINE_RESOLVED_AT=0
+TIMELINE_CUSTOM_FIELDS='[{"name":"merge_status","label":"Merge status","type":"string","value":"merged"},{"name":"approvals","type":"number","value":0},{"name":"draft","type":"boolean","value":false}]'
 ```
 
 Set `TIMELINE_CHANNEL_SCOPE=true` to send `channels: [<channel name>]`. By default the helper posts with the team name/slug and channel name to exercise the same path users copy from URLs. Override `TIMELINE_TEAM_IDENTIFIER` or `TIMELINE_CHANNEL_IDENTIFIER` with 26-character Mattermost IDs when you need to verify ID-only behavior. The helper then fetches `/plugins/ch.icorete.mattermost-timeline/api/v1/events` with the resolved ID context and prints the event id plus channel URL.
@@ -149,6 +150,8 @@ TIMELINE_SIGNED_WEBHOOK=true \
 TIMELINE_BATCH=true \
 .agents/skills/mattermost-timeline-dev-smoke/scripts/post-sample-event.py
 ```
+
+Set `TIMELINE_CUSTOM_FIELDS` to a JSON array to exercise custom field creation or replacement using the same `TIMELINE_EXTERNAL_ID`. Unset it to omit the property, use `null` to retain existing fields, or use `[]` to clear them. Zero and false must stay JSON number and boolean values, not quoted strings. Test malformed custom fields in a mixed batch as well as a single webhook so an invalid sibling cannot hide the successful event.
 
 ## Browser smoke checklist
 

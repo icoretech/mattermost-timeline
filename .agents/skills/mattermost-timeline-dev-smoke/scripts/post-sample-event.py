@@ -41,6 +41,7 @@ ENVIRONMENT = os.environ.get("TIMELINE_ENVIRONMENT")
 PINNED = os.environ.get("TIMELINE_PINNED")
 EXPIRES_AT = os.environ.get("TIMELINE_EXPIRES_AT")
 RESOLVED_AT = os.environ.get("TIMELINE_RESOLVED_AT")
+CUSTOM_FIELDS = os.environ.get("TIMELINE_CUSTOM_FIELDS")
 TEAM_IDENTIFIER = os.environ.get("TIMELINE_TEAM_IDENTIFIER")
 CHANNEL_IDENTIFIER = os.environ.get("TIMELINE_CHANNEL_IDENTIFIER")
 PLUGIN_ID = "ch.icorete.mattermost-timeline"
@@ -169,6 +170,8 @@ def post_webhook(team, channel):
     }.items():
         if value is not None:
             payload[key] = value
+    if CUSTOM_FIELDS is not None:
+        payload["custom_fields"] = json.loads(CUSTOM_FIELDS)
 
     path = f"/plugins/{PLUGIN_ID}/webhook?team_id={urllib.parse.quote(team_identifier)}"
     request_payload = payload
@@ -235,6 +238,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception as error:
+    except (RuntimeError, ValueError, urllib.error.URLError) as error:
         print(error, file=sys.stderr)
         sys.exit(1)

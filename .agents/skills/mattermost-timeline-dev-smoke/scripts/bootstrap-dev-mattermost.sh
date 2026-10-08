@@ -9,7 +9,6 @@ ADMIN_PASSWORD="${MM_ADMIN_PASSWORD:-Password1!}"
 ADMIN_USERNAME="${MM_ADMIN_USER:-admin}"
 TEAM_NAME="${MATTERMOST_DEV_TEAM:-example-org}"
 TEAM_DISPLAY_NAME="${MATTERMOST_DEV_TEAM_DISPLAY:-Example Org}"
-WEBHOOK_SECRET="${TIMELINE_WEBHOOK_SECRET:-timeline-smoke-secret}"
 
 wait_for_mattermost() {
   local deadline=$((SECONDS + 180))
@@ -123,17 +122,16 @@ main() {
 Mattermost dev stack ready:
   URL: $SITE_URL/$TEAM_NAME/channels/town-square
   Admin login: $ADMIN_EMAIL
-  Admin password: $ADMIN_PASSWORD
-  Timeline webhook secret: $WEBHOOK_SECRET
+  Credentials: export existing MM_ADMIN_PASSWORD and TIMELINE_WEBHOOK_SECRET values before deployment
 
 Deploy the plugin with:
-  MM_SERVICESETTINGS_SITEURL=$SITE_URL MM_ADMIN_USERNAME=$ADMIN_EMAIL MM_ADMIN_PASSWORD='$ADMIN_PASSWORD' make deploy
+  MM_SERVICESETTINGS_SITEURL=$SITE_URL MM_ADMIN_USERNAME=$ADMIN_EMAIL make deploy
 
 Configure the plugin with:
-  MM_SERVICESETTINGS_SITEURL=$SITE_URL MM_ADMIN_USERNAME=$ADMIN_EMAIL MM_ADMIN_PASSWORD='$ADMIN_PASSWORD' TIMELINE_WEBHOOK_SECRET='$WEBHOOK_SECRET' .agents/skills/mattermost-timeline-dev-smoke/scripts/configure-plugin.py
+  MM_SERVICESETTINGS_SITEURL=$SITE_URL MM_ADMIN_USERNAME=$ADMIN_EMAIL .agents/skills/mattermost-timeline-dev-smoke/scripts/configure-plugin.py
 
 Smoke-test it with:
-  MM_SERVICESETTINGS_SITEURL=$SITE_URL MM_ADMIN_USERNAME=$ADMIN_EMAIL MM_ADMIN_PASSWORD='$ADMIN_PASSWORD' TIMELINE_WEBHOOK_SECRET='$WEBHOOK_SECRET' .agents/skills/mattermost-timeline-dev-smoke/scripts/post-sample-event.py
+  MM_SERVICESETTINGS_SITEURL=$SITE_URL MM_ADMIN_USERNAME=$ADMIN_EMAIL .agents/skills/mattermost-timeline-dev-smoke/scripts/post-sample-event.py
 EOF
 }
 
