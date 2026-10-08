@@ -34,6 +34,7 @@ jobs:
       - run: cd webapp && npm run typecheck
       - run: cd webapp && npm run biome:ci
       - run: cd webapp && npm run doctor
+      - run: cd webapp && npm run i18n:check
       - run: cd webapp && npm run test
       - run: cd webapp && npm run build
 

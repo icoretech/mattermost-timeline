@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useMessages } from "../i18n";
 import type { ReactionClientSummary, TimelineUser } from "../types/timeline";
-import { REACTION_ICON_BY_NAME } from "./reactions";
+import { REACTION_ICON_BY_NAME, REACTION_MESSAGE_KEYS } from "./reactions";
 
 const TOOLTIP_CACHE_TTL_MS = 30000;
 
@@ -27,6 +28,7 @@ export default function ReactionPill({
   onFetchUsers,
   getUser,
 }: Props) {
+  const { t } = useMessages();
   const [tooltipUsers, setTooltipUsers] = useState<string[] | null>(null);
   const [tooltipError, setTooltipError] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -90,15 +92,20 @@ export default function ReactionPill({
   });
 
   const tooltipText = tooltipError
-    ? "Unable to load users"
+    ? t("reaction.usersError")
     : tooltipUsers
       ? tooltipUsers.map((uid) => getUser(uid)?.username || uid).join(", ")
-      : "Loading...";
+      : t("reaction.loading");
 
   return (
     <button
       type="button"
       className={`reaction-pill ${summary.self ? "reaction-pill--active" : ""}`}
+      aria-label={t("reaction.count", {
+        label: t(REACTION_MESSAGE_KEYS[icon]),
+        count: summary.count,
+      })}
+      aria-pressed={summary.self}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}

@@ -1,5 +1,6 @@
 import React, { type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { withIntl } from "../test_utils";
 import type { EventEntry } from "../types/timeline";
 import TimelineEntry from "./timeline_entry";
 import {
@@ -20,19 +21,21 @@ function queryStaticTimelineEntry(
   timestampDisplayPreferences = defaultTimestampDisplayPreferences,
 ): HTMLElement {
   const html = renderToStaticMarkup(
-    React.createElement(TimelineEntry, {
-      event,
-      isNew: false,
-      isUpdated: false,
-      onAnimationEnd: () => undefined,
-      onUpdateAnimationEnd: () => undefined,
-      enableReactions: false,
-      timestampDisplayPreferences,
-      onAddReaction: () => undefined,
-      onRemoveReaction: () => undefined,
-      onFetchReactionUsers: async () => [],
-      getUser: () => undefined,
-    }),
+    withIntl(
+      React.createElement(TimelineEntry, {
+        event,
+        isNew: false,
+        isUpdated: false,
+        onAnimationEnd: () => undefined,
+        onUpdateAnimationEnd: () => undefined,
+        enableReactions: false,
+        timestampDisplayPreferences,
+        onAddReaction: () => undefined,
+        onRemoveReaction: () => undefined,
+        onFetchReactionUsers: async () => [],
+        getUser: () => undefined,
+      }),
+    ),
   );
   const container = document.createElement("div");
   container.innerHTML = html;
@@ -192,19 +195,21 @@ describe("renderMarkdown", () => {
     };
 
     const html = renderToStaticMarkup(
-      React.createElement(TimelineEntry, {
-        event,
-        isNew: false,
-        isUpdated: false,
-        onAnimationEnd: () => undefined,
-        onUpdateAnimationEnd: () => undefined,
-        enableReactions: false,
-        onAddReaction: () => undefined,
-        onRemoveReaction: () => undefined,
-        onFetchReactionUsers: async () => [],
-        getUser: () => undefined,
-        timestampDisplayPreferences: defaultTimestampDisplayPreferences,
-      }),
+      withIntl(
+        React.createElement(TimelineEntry, {
+          event,
+          isNew: false,
+          isUpdated: false,
+          onAnimationEnd: () => undefined,
+          onUpdateAnimationEnd: () => undefined,
+          enableReactions: false,
+          onAddReaction: () => undefined,
+          onRemoveReaction: () => undefined,
+          onFetchReactionUsers: async () => [],
+          getUser: () => undefined,
+          timestampDisplayPreferences: defaultTimestampDisplayPreferences,
+        }),
+      ),
     );
 
     expect(html).toContain("danger");

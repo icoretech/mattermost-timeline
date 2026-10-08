@@ -1,0 +1,13 @@
+{
+  "chrome.title": "이벤트",
+  "chrome.toggle": "이벤트 열기 또는 닫기",
+  "chrome.unread": "읽지 않은 이벤트가 있습니다",
+  "error.load": "이벤트를 불러오지 못했습니다. 다시 시도하세요.",
+  "error.reaction": "반응을 업데이트하지 못했습니다. 다시 시도하세요.",
+  "error.unauthorized": "세션이 만료되었습니다. 다시 로그인하세요.",
+  "error.forbidden": "이 타임라인을 보거나 변경할 권한이 없습니다.",
+  "error.notFound": "요청한 타임라인 이벤트를 찾을 수 없습니다.",
+  "error.server": "서버에서 요청을 완료하지 못했습니다. 다시 시도하세요.",
+  "error.network": "서버에 연결할 수 없습니다. 연결 상태를 확인한 후 다시 시도하세요.",
+  "error.invalidResponse": "서버에서 유효하지 않은 응답을 반환했습니다. 다시 시도하세요."
+}

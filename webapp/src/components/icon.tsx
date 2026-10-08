@@ -3,17 +3,20 @@ import { useDispatch, useSelector } from "react-redux";
 import type { Dispatch } from "redux";
 
 import { type EventFeedThunk, refreshUnreadEvents } from "../actions";
+import { useMessages } from "../i18n";
 import {
   getCurrentChannelId,
   getCurrentTeamId,
   getHasCurrentTimelineUnread,
 } from "../selectors";
+import { TimelineSignalIcon } from "./timeline_signal_icon";
 
 // Mattermost host store supports thunk dispatch
 type AppDispatch = Dispatch &
   ((thunk: EventFeedThunk<unknown>) => Promise<unknown> | unknown);
 
 const Icon = () => {
+  const { t } = useMessages();
   const dispatch = useDispatch<AppDispatch>();
   const currentTeamId = useSelector(getCurrentTeamId);
   const currentChannelId = useSelector(getCurrentChannelId);
@@ -26,19 +29,10 @@ const Icon = () => {
   }, [dispatch, currentTeamId, currentChannelId]);
 
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ width: "16px", height: "16px" }}
-      role="img"
-      aria-label={hasUnread ? "Event Feed has unread events" : "Event Feed"}
+    <TimelineSignalIcon
+      size={16}
+      label={t(hasUnread ? "chrome.unread" : "chrome.title")}
     >
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       {hasUnread && (
         <circle
           cx="19"
@@ -49,7 +43,7 @@ const Icon = () => {
           strokeWidth="2"
         />
       )}
-    </svg>
+    </TimelineSignalIcon>
   );
 };
 

@@ -113,6 +113,8 @@ type storedWebhookEvent struct {
 type webhookHandlerError struct {
 	message string
 	status  int
+	Code    string
+	Params  map[string]string
 }
 
 type BatchWebhookResponse struct {
@@ -135,7 +137,7 @@ type markEventsReadRequest struct {
 func (p *Plugin) resolveWebhookTeamID(teamIdentifier string) (string, *webhookHandlerError) {
 	teamIdentifier = strings.TrimSpace(teamIdentifier)
 	if teamIdentifier == "" {
-		return "", &webhookHandlerError{message: "team_id is required (query param or JSON field)", status: http.StatusBadRequest}
+		return "", &webhookHandlerError{message: "team_id is required (query param or JSON field)", status: http.StatusBadRequest, Code: "team_required"}
 	}
 
 	if model.IsValidId(teamIdentifier) {
@@ -144,13 +146,13 @@ func (p *Plugin) resolveWebhookTeamID(teamIdentifier string) (string, *webhookHa
 			return team.Id, nil
 		}
 		if appErr != nil && appErr.StatusCode != http.StatusNotFound {
-			return "", &webhookHandlerError{message: fmt.Sprintf("Failed to resolve team ID: %s", teamIdentifier), status: http.StatusInternalServerError}
+			return "", &webhookHandlerError{message: fmt.Sprintf("Failed to resolve team ID: %s", teamIdentifier), status: http.StatusInternalServerError, Code: "team_lookup_failed", Params: map[string]string{"team": teamIdentifier}}
 		}
 	}
 
 	team, appErr := p.API.GetTeamByName(teamIdentifier)
 	if appErr != nil || team == nil {
-		return "", &webhookHandlerError{message: fmt.Sprintf("Invalid team ID or name: %s", teamIdentifier), status: http.StatusBadRequest}
+		return "", &webhookHandlerError{message: fmt.Sprintf("Invalid team ID or name: %s", teamIdentifier), status: http.StatusBadRequest, Code: "team_invalid", Params: map[string]string{"team": teamIdentifier}}
 	}
 
 	return team.Id, nil
@@ -180,7 +182,7 @@ func (p *Plugin) resolveWebhookChannelIDs(teamID string, channelIdentifiers []st
 func (p *Plugin) resolveWebhookChannelID(teamID, channelIdentifier string) (string, *webhookHandlerError) {
 	channelIdentifier = strings.TrimSpace(channelIdentifier)
 	if channelIdentifier == "" {
-		return "", &webhookHandlerError{message: "Channel ID or name cannot be empty", status: http.StatusBadRequest}
+		return "", &webhookHandlerError{message: "Channel ID or name cannot be empty", status: http.StatusBadRequest, Code: "channel_required"}
 	}
 
 	var ch *model.Channel
@@ -191,13 +193,13 @@ func (p *Plugin) resolveWebhookChannelID(teamID, channelIdentifier string) (stri
 		ch, appErr = p.API.GetChannelByName(teamID, channelIdentifier, false)
 	}
 	if appErr != nil || ch == nil {
-		return "", &webhookHandlerError{message: fmt.Sprintf("Invalid channel ID or name: %s", channelIdentifier), status: http.StatusBadRequest}
+		return "", &webhookHandlerError{message: fmt.Sprintf("Invalid channel ID or name: %s", channelIdentifier), status: http.StatusBadRequest, Code: "channel_invalid", Params: map[string]string{"channel": channelIdentifier}}
 	}
 	if ch.TeamId != teamID {
-		return "", &webhookHandlerError{message: fmt.Sprintf("Channel %s does not belong to team %s", channelIdentifier, teamID), status: http.StatusBadRequest}
+		return "", &webhookHandlerError{message: fmt.Sprintf("Channel %s does not belong to team %s", channelIdentifier, teamID), status: http.StatusBadRequest, Code: "channel_team_mismatch", Params: map[string]string{"channel": channelIdentifier, "team": teamID}}
 	}
 	if ch.Type == model.ChannelTypeDirect || ch.Type == model.ChannelTypeGroup {
-		return "", &webhookHandlerError{message: fmt.Sprintf("DM/GM channels are not supported: %s", channelIdentifier), status: http.StatusBadRequest}
+		return "", &webhookHandlerError{message: fmt.Sprintf("DM/GM channels are not supported: %s", channelIdentifier), status: http.StatusBadRequest, Code: "channel_dm_unsupported", Params: map[string]string{"channel": channelIdentifier}}
 	}
 
 	return ch.Id, nil

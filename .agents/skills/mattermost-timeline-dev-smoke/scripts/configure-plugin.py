@@ -5,7 +5,9 @@ import sys
 import urllib.error
 import urllib.request
 
-SITE_URL = os.environ.get("MM_SERVICESETTINGS_SITEURL", "http://localhost:18065").rstrip("/")
+SITE_URL = os.environ.get(
+    "MM_SERVICESETTINGS_SITEURL", "http://localhost:18065"
+).rstrip("/")
 ADMIN_USERNAME = os.environ.get("MM_ADMIN_USERNAME", "admin@example.com")
 ADMIN_PASSWORD = os.environ.get("MM_ADMIN_PASSWORD", "Password1!")
 WEBHOOK_SECRET = os.environ.get("TIMELINE_WEBHOOK_SECRET", "timeline-smoke-secret")
@@ -35,7 +37,9 @@ def request_json(method, path, payload=None, token=None):
             return decoded, response.headers
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {path} failed with {error.code}: {detail}") from error
+        raise RuntimeError(
+            f"{method} {path} failed with {error.code}: {detail}"
+        ) from error
 
 
 def login():
@@ -56,17 +60,29 @@ def main():
     plugin_settings = config.setdefault("PluginSettings", {})
     plugins = plugin_settings.setdefault("Plugins", {})
     timeline_config = plugins.setdefault(PLUGIN_ID, {})
-    timeline_config["WebhookSecret"] = WEBHOOK_SECRET
+    for key in (
+        "WebhookSecret",
+        "WebhookTokens",
+        "RequireSignedWebhooks",
+        "WebhookTools",
+        "MaxEventsStored",
+        "MaxEventsDisplayed",
+        "TimelineOrder",
+        "EnableReactions",
+    ):
+        if key in timeline_config:
+            timeline_config.setdefault(key.lower(), timeline_config.pop(key))
+    timeline_config["webhooksecret"] = WEBHOOK_SECRET
     if WEBHOOK_TOKENS is not None:
         json.loads(WEBHOOK_TOKENS)
-        timeline_config["WebhookTokens"] = WEBHOOK_TOKENS
+        timeline_config["webhooktokens"] = WEBHOOK_TOKENS
     else:
-        timeline_config.setdefault("WebhookTokens", "[]")
-    timeline_config["RequireSignedWebhooks"] = REQUIRE_SIGNED_WEBHOOKS
-    timeline_config.setdefault("MaxEventsStored", "500")
-    timeline_config.setdefault("MaxEventsDisplayed", "100")
-    timeline_config.setdefault("TimelineOrder", "oldest_first")
-    timeline_config.setdefault("EnableReactions", True)
+        timeline_config.setdefault("webhooktokens", "[]")
+    timeline_config["requiresignedwebhooks"] = REQUIRE_SIGNED_WEBHOOKS
+    timeline_config.setdefault("maxeventsstored", "500")
+    timeline_config.setdefault("maxeventsdisplayed", "100")
+    timeline_config.setdefault("timelineorder", "oldest_first")
+    timeline_config.setdefault("enablereactions", True)
 
     request_json("PUT", "/api/v4/config", config, token=token)
     print(f"configured_plugin={PLUGIN_ID}")
@@ -79,6 +95,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception as error:
+    except (RuntimeError, ValueError, urllib.error.URLError) as error:
         print(error, file=sys.stderr)
         sys.exit(1)

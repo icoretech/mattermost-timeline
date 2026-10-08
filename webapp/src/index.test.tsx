@@ -1,3 +1,5 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   HYDRATE_POPOUT_STATE,
@@ -6,7 +8,9 @@ import {
   SET_CURRENT_USER_ID,
   SET_VIEW_CONTEXT,
 } from "./actions";
+import { catalogs } from "./i18n_catalogs";
 import manifest from "./manifest";
+import { withIntl } from "./test_utils";
 
 describe("plugin entrypoint", () => {
   afterEach(() => {
@@ -90,9 +94,13 @@ describe("plugin entrypoint", () => {
 
     const registry = {
       registerReducer: vi.fn(),
-      registerRightHandSidebarComponent: vi.fn(() => ({
-        toggleRHSPlugin: { type: "toggle_rhs" },
-      })),
+      registerTranslations: vi.fn(),
+      registerAdminConsoleCustomSetting: vi.fn(),
+      registerRightHandSidebarComponent: vi.fn(
+        (_component: unknown, _title: unknown) => ({
+          toggleRHSPlugin: { type: "toggle_rhs" },
+        }),
+      ),
       registerChannelHeaderButtonAction: vi.fn(),
       registerWebSocketEventHandler: vi.fn(),
       registerRHSPluginPopoutListener: vi.fn((_pluginId, listener) => {
@@ -101,6 +109,28 @@ describe("plugin entrypoint", () => {
     };
 
     plugin.initialize(registry, store);
+
+    const translationsForLocale =
+      registry.registerTranslations.mock.calls[0]?.[0];
+    expect(typeof translationsForLocale).toBe("function");
+    expect(translationsForLocale("ko")[`${manifest.id}.chrome.title`]).toBe(
+      "이벤트",
+    );
+    const registeredTitle: unknown =
+      registry.registerRightHandSidebarComponent.mock.calls[0]?.[1];
+    if (!React.isValidElement(registeredTitle))
+      throw new TypeError("Expected a reactive native sidebar title");
+    for (const [locale, messages] of Object.entries(catalogs)) {
+      const title = document.createElement("div");
+      title.innerHTML = renderToStaticMarkup(withIntl(registeredTitle, locale));
+      expect(title.textContent, locale).toBe(messages["chrome.title"]);
+      const icons = title.querySelectorAll("svg");
+      expect(icons, locale).toHaveLength(1);
+      expect(icons[0]?.getAttribute("aria-hidden"), locale).toBe("true");
+      expect(icons[0]?.getAttribute("focusable"), locale).toBe("false");
+      expect(icons[0]?.getAttribute("width"), locale).toBe("16");
+      expect(icons[0]?.getAttribute("height"), locale).toBe("16");
+    }
 
     expect(registry.registerRHSPluginPopoutListener).toHaveBeenCalledWith(
       manifest.id,
@@ -203,6 +233,8 @@ describe("plugin entrypoint", () => {
     };
     const registry = {
       registerReducer: vi.fn(),
+      registerTranslations: vi.fn(),
+      registerAdminConsoleCustomSetting: vi.fn(),
       registerRightHandSidebarComponent: vi.fn(() => ({
         toggleRHSPlugin: { type: "toggle_rhs" },
       })),
@@ -273,6 +305,8 @@ describe("plugin entrypoint", () => {
     };
     const registry = {
       registerReducer: vi.fn(),
+      registerTranslations: vi.fn(),
+      registerAdminConsoleCustomSetting: vi.fn(),
       registerRightHandSidebarComponent: vi.fn(() => ({
         toggleRHSPlugin: { type: "toggle_rhs" },
       })),

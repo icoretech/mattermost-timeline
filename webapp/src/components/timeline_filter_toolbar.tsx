@@ -1,4 +1,5 @@
 import React from "react";
+import { useMessages } from "../i18n";
 
 import { TIMELINE_STATUSES } from "../types/timeline";
 import type {
@@ -15,6 +16,7 @@ export default function TimelineFilterToolbar({
   filterSetters,
   filterState,
 }: TimelineFilterToolbarProps) {
+  const { t } = useMessages();
   const {
     searchQuery,
     filtersOpen,
@@ -43,15 +45,15 @@ export default function TimelineFilterToolbar({
   return (
     <div className="event-feed-toolbar">
       <label className="event-feed-sr-only" htmlFor="event-feed-search">
-        {"Search timeline events"}
+        {t("timeline.searchLabel")}
       </label>
       <input
         id="event-feed-search"
         className="event-feed-search"
         type="search"
         value={searchQuery}
-        placeholder="Search timeline"
-        aria-label="Search timeline events"
+        placeholder={t("timeline.searchPlaceholder")}
+        aria-label={t("timeline.searchLabel")}
         onChange={(event) => setSearchQuery(event.currentTarget.value)}
       />
       <button
@@ -61,47 +63,47 @@ export default function TimelineFilterToolbar({
         aria-controls="event-feed-filter-panel"
         onClick={() => setFiltersOpen((open) => !open)}
       >
-        {"Filters"}
+        {t("timeline.filters")}
       </button>
       {filtersOpen && (
         <div id="event-feed-filter-panel" className="event-feed-filters">
           <label className="event-feed-sr-only" htmlFor="event-type-filter">
-            {"Event type"}
+            {t("timeline.eventType")}
           </label>
           <input
             id="event-type-filter"
             className="event-feed-filter-input"
             type="text"
             value={eventTypeFilter}
-            placeholder="Event type"
+            placeholder={t("timeline.eventType")}
             onChange={(event) => setEventTypeFilter(event.currentTarget.value)}
           />
           <label className="event-feed-sr-only" htmlFor="source-filter">
-            {"Source"}
+            {t("timeline.source")}
           </label>
           <input
             id="source-filter"
             className="event-feed-filter-input"
             type="text"
             value={sourceFilter}
-            placeholder="Source"
+            placeholder={t("timeline.source")}
             onChange={(event) => setSourceFilter(event.currentTarget.value)}
           />
           <label className="event-feed-sr-only" htmlFor="environment-filter">
-            {"Environment"}
+            {t("timeline.environment")}
           </label>
           <input
             id="environment-filter"
             className="event-feed-filter-input"
             type="text"
             value={environmentFilter}
-            placeholder="Environment"
+            placeholder={t("timeline.environment")}
             onChange={(event) =>
               setEnvironmentFilter(event.currentTarget.value)
             }
           />
           <label className="event-feed-sr-only" htmlFor="severity-filter">
-            {"Severity"}
+            {t("timeline.severity")}
           </label>
           <select
             id="severity-filter"
@@ -113,13 +115,13 @@ export default function TimelineFilterToolbar({
               )
             }
           >
-            <option value="">{"Severity"}</option>
-            <option value="info">{"info"}</option>
-            <option value="warning">{"warning"}</option>
-            <option value="critical">{"critical"}</option>
+            <option value="">{t("timeline.severity")}</option>
+            <option value="info">{t("severity.info")}</option>
+            <option value="warning">{t("severity.warning")}</option>
+            <option value="critical">{t("severity.critical")}</option>
           </select>
           <label className="event-feed-sr-only" htmlFor="status-filter">
-            {"Status"}
+            {t("timeline.status")}
           </label>
           <select
             id="status-filter"
@@ -129,10 +131,10 @@ export default function TimelineFilterToolbar({
               setStatusFilter(event.currentTarget.value as typeof statusFilter)
             }
           >
-            <option value="">{"Status"}</option>
+            <option value="">{t("timeline.status")}</option>
             {TIMELINE_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {t(`status.${status}`)}
               </option>
             ))}
           </select>
@@ -142,7 +144,7 @@ export default function TimelineFilterToolbar({
             aria-pressed={pinnedOnly}
             onClick={() => setPinnedOnly((value) => !value)}
           >
-            {"Pinned"}
+            {t("timeline.pinnedFilter")}
           </button>
           <button
             type="button"
@@ -150,7 +152,7 @@ export default function TimelineFilterToolbar({
             aria-pressed={activeOnly}
             onClick={() => setActiveOnly((value) => !value)}
           >
-            {"Active"}
+            {t("timeline.active")}
           </button>
           <button
             type="button"
@@ -158,7 +160,7 @@ export default function TimelineFilterToolbar({
             aria-pressed={unreadOnly}
             onClick={() => setUnreadOnly((value) => !value)}
           >
-            {"Unread"}
+            {t("timeline.unread")}
           </button>
         </div>
       )}

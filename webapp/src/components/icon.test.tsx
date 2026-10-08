@@ -1,12 +1,15 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { Provider } from "react-redux";
 import type { Store } from "redux";
 import { vi } from "vitest";
 
 import { RECEIVED_CONTEXT_UNREAD_EVENTS } from "../actions";
 import manifest from "../manifest";
+import { withIntl } from "../test_utils";
 import Icon from "./icon";
+import { TimelineSignalIcon } from "./timeline_signal_icon";
 
 type TestState = {
   entities: {
@@ -59,7 +62,7 @@ function makeStore(state: TestState) {
   } as unknown as Store;
 }
 
-async function renderIcon(state: TestState) {
+async function renderIcon(state: TestState, locale = "en") {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -67,9 +70,12 @@ async function renderIcon(state: TestState) {
 
   await act(async () => {
     root.render(
-      <Provider store={store}>
-        <Icon />
-      </Provider>,
+      withIntl(
+        <Provider store={store}>
+          <Icon />
+        </Provider>,
+        locale,
+      ),
     );
     await Promise.resolve();
   });
@@ -86,6 +92,7 @@ async function cleanup(root: Root, container: HTMLElement) {
 
 describe("Icon", () => {
   beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
@@ -115,6 +122,7 @@ describe("Icon", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     document.body.replaceChildren();
   });
 
@@ -130,7 +138,11 @@ describe("Icon", () => {
     );
     const icon = container.querySelector('[role="img"]');
     expect(icon?.tagName.toLowerCase()).toBe("svg");
-    expect(icon?.getAttribute("aria-label")).toBe("Event Feed");
+    expect(icon?.getAttribute("aria-label")).toBe("Events");
+    expect(icon?.getAttribute("aria-hidden")).toBe("false");
+    expect(icon?.getAttribute("width")).toBe("16");
+    expect(icon?.getAttribute("height")).toBe("16");
+    expect(icon?.classList.contains("lucide-satellite-dish")).toBe(true);
     expect(icon?.querySelector("circle")).toBeNull();
 
     await cleanup(root, container);
@@ -149,10 +161,48 @@ describe("Icon", () => {
     expect(unreadDot?.getAttribute("stroke")).toBe(
       "var(--center-channel-bg, #fff)",
     );
-    expect(icon?.getAttribute("aria-label")).toBe(
-      "Event Feed has unread events",
-    );
+    expect(icon?.getAttribute("aria-label")).toBe("Unread events");
+    expect(icon?.getAttribute("aria-hidden")).toBe("false");
+    expect(icon?.classList.contains("lucide-satellite-dish")).toBe(true);
+    expect(icon?.lastElementChild).toBe(unreadDot);
 
     await cleanup(root, container);
   });
+
+  it.each([
+    { unread: false, label: "Eventi" },
+    { unread: true, label: "Ci sono eventi non letti" },
+  ])(
+    "uses the host locale for the launcher label when unread is $unread",
+    async ({ unread, label }) => {
+      const { container, root } = await renderIcon(makeState({ unread }), "it");
+
+      expect(
+        container.querySelector('[role="img"]')?.getAttribute("aria-label"),
+      ).toBe(label);
+
+      await cleanup(root, container);
+    },
+  );
+});
+
+describe("TimelineSignalIcon", () => {
+  it.each([16, 40])(
+    "hides the decorative icon from assistive technology at size %i",
+    (size) => {
+      const container = document.createElement("div");
+
+      container.innerHTML = renderToStaticMarkup(
+        <TimelineSignalIcon size={size} />,
+      );
+
+      const icon = container.querySelector("svg");
+      expect(icon?.getAttribute("aria-hidden")).toBe("true");
+      expect(icon?.getAttribute("focusable")).toBe("false");
+      expect(icon?.hasAttribute("aria-label")).toBe(false);
+      expect(icon?.hasAttribute("role")).toBe(false);
+      expect(icon?.getAttribute("width")).toBe(String(size));
+      expect(icon?.getAttribute("height")).toBe(String(size));
+    },
+  );
 });

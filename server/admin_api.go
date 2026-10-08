@@ -39,7 +39,7 @@ func (p *Plugin) handleGetWebhookConfig(w http.ResponseWriter, r *http.Request) 
 	tokens, err := parseWebhookTokenConfigs(config.WebhookTokens)
 	if err != nil {
 		p.API.LogError("Invalid webhook token configuration", "error", err.Error())
-		http.Error(w, "Invalid webhook token configuration", http.StatusInternalServerError)
+		p.writeAdminError(w, &webhookHandlerError{message: "Invalid webhook token configuration", status: http.StatusInternalServerError, Code: "invalid_token_config"})
 		return
 	}
 
@@ -64,7 +64,7 @@ func buildWebhookConfigResponse(config *configuration, tokens []webhookTokenConf
 func (p *Plugin) handleUpdateWebhookTokens(w http.ResponseWriter, r *http.Request) {
 	var payload updateWebhookTokensRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		p.writeAdminError(w, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest, Code: "invalid_json"})
 		return
 	}
 
@@ -72,27 +72,27 @@ func (p *Plugin) handleUpdateWebhookTokens(w http.ResponseWriter, r *http.Reques
 	currentTokens, err := parseWebhookTokenConfigs(config.WebhookTokens)
 	if err != nil {
 		p.API.LogError("Invalid webhook token configuration", "error", err.Error())
-		http.Error(w, "Invalid webhook token configuration", http.StatusInternalServerError)
+		p.writeAdminError(w, &webhookHandlerError{message: "Invalid webhook token configuration", status: http.StatusInternalServerError, Code: "invalid_token_config"})
 		return
 	}
 
 	nextTokens, handlerErr := prepareWebhookTokenUpdate(payload.Tokens, currentTokens, config.WebhookSecret)
 	if handlerErr != nil {
-		http.Error(w, handlerErr.message, handlerErr.status)
+		p.writeAdminError(w, handlerErr)
 		return
 	}
 
 	data, err := json.Marshal(nextTokens)
 	if err != nil {
 		p.API.LogError("Failed to encode webhook token configuration", "error", err.Error())
-		http.Error(w, "Failed to encode webhook token configuration", http.StatusInternalServerError)
+		p.writeAdminError(w, &webhookHandlerError{message: "Failed to encode webhook token configuration", status: http.StatusInternalServerError, Code: "encode_token_config"})
 		return
 	}
 
 	config.WebhookTokens = string(data)
 	if appErr := p.API.SavePluginConfig(pluginConfigMap(config)); appErr != nil {
 		p.API.LogError("Failed to save webhook token configuration", "error", appErr.Error())
-		http.Error(w, "Failed to save webhook token configuration", http.StatusInternalServerError)
+		p.writeAdminError(w, &webhookHandlerError{message: "Failed to save webhook token configuration", status: http.StatusInternalServerError, Code: "save_token_config"})
 		return
 	}
 
@@ -115,19 +115,16 @@ func prepareWebhookTokenUpdate(incoming []webhookTokenConfig, existing []webhook
 	}
 
 	seenNames := make(map[string]struct{}, len(incoming))
-	seenEnabledSecrets := make(map[string]string, len(incoming)+1)
-	if strings.TrimSpace(legacySecret) != "" {
-		seenEnabledSecrets[strings.TrimSpace(legacySecret)] = "legacy Webhook Secret"
-	}
+	seenEnabledSecrets := make(map[string]string, len(incoming))
 
 	next := make([]webhookTokenConfig, 0, len(incoming))
 	for _, token := range incoming {
 		name := strings.TrimSpace(token.Name)
 		if name == "" {
-			return nil, &webhookHandlerError{message: "Webhook token name is required", status: http.StatusBadRequest}
+			return nil, &webhookHandlerError{message: "Webhook token name is required", status: http.StatusBadRequest, Code: "token_name_required"}
 		}
 		if _, ok := seenNames[name]; ok {
-			return nil, &webhookHandlerError{message: "Duplicate webhook token name: " + name, status: http.StatusBadRequest}
+			return nil, &webhookHandlerError{message: "Duplicate webhook token name: " + name, status: http.StatusBadRequest, Code: "token_name_duplicate", Params: map[string]string{"name": name}}
 		}
 		seenNames[name] = struct{}{}
 
@@ -141,11 +138,14 @@ func prepareWebhookTokenUpdate(incoming []webhookTokenConfig, existing []webhook
 			secret = existingSecrets[name]
 		}
 		if enabled && secret == "" {
-			return nil, &webhookHandlerError{message: "Webhook token secret is required for enabled token: " + name, status: http.StatusBadRequest}
+			return nil, &webhookHandlerError{message: "Webhook token secret is required for enabled token: " + name, status: http.StatusBadRequest, Code: "token_secret_required", Params: map[string]string{"name": name}}
 		}
 		if enabled && secret != "" {
+			if secret == strings.TrimSpace(legacySecret) {
+				return nil, &webhookHandlerError{message: "Webhook token secret for " + name + " duplicates legacy Webhook Secret", status: http.StatusBadRequest, Code: "token_secret_matches_legacy", Params: map[string]string{"name": name}}
+			}
 			if owner, ok := seenEnabledSecrets[secret]; ok {
-				return nil, &webhookHandlerError{message: "Webhook token secret for " + name + " duplicates " + owner, status: http.StatusBadRequest}
+				return nil, &webhookHandlerError{message: "Webhook token secret for " + name + " duplicates " + owner, status: http.StatusBadRequest, Code: "token_secret_duplicate", Params: map[string]string{"name": name, "owner": owner}}
 			}
 			seenEnabledSecrets[secret] = name
 		}
@@ -173,14 +173,14 @@ func prepareWebhookTokenUpdate(incoming []webhookTokenConfig, existing []webhook
 
 func pluginConfigMap(config *configuration) map[string]interface{} {
 	return map[string]interface{}{
-		"WebhookSecret":         config.WebhookSecret,
-		"WebhookTokens":         config.WebhookTokens,
-		"RequireSignedWebhooks": config.RequireSignedWebhooks,
-		"WebhookTools":          config.WebhookTools,
-		"MaxEventsStored":       config.MaxEventsStored,
-		"MaxEventsDisplayed":    config.MaxEventsDisplayed,
-		"TimelineOrder":         config.TimelineOrder,
-		"EnableReactions":       config.EnableReactions,
+		"webhooksecret":         config.WebhookSecret,
+		"webhooktokens":         config.WebhookTokens,
+		"requiresignedwebhooks": config.RequireSignedWebhooks,
+		"webhooktools":          config.WebhookTools,
+		"maxeventsstored":       config.MaxEventsStored,
+		"maxeventsdisplayed":    config.MaxEventsDisplayed,
+		"timelineorder":         config.TimelineOrder,
+		"enablereactions":       config.EnableReactions,
 	}
 }
 
@@ -207,13 +207,13 @@ func sanitizeWebhookTokens(tokens []webhookTokenConfig) []sanitizedWebhookTokenC
 func (p *Plugin) handleCreateTestEvent(w http.ResponseWriter, r *http.Request) {
 	var payload createTestEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		p.writeAdminError(w, &webhookHandlerError{message: "Invalid JSON payload", status: http.StatusBadRequest, Code: "invalid_json"})
 		return
 	}
 
 	teamID, handlerErr := p.resolveWebhookTeamID(payload.TeamID)
 	if handlerErr != nil {
-		http.Error(w, handlerErr.message, handlerErr.status)
+		p.writeAdminError(w, handlerErr)
 		return
 	}
 
@@ -221,7 +221,7 @@ func (p *Plugin) handleCreateTestEvent(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(payload.ChannelID) != "" {
 		channelID, handlerErr := p.resolveWebhookChannelID(teamID, payload.ChannelID)
 		if handlerErr != nil {
-			http.Error(w, handlerErr.message, handlerErr.status)
+			p.writeAdminError(w, handlerErr)
 			return
 		}
 		channels = []string{channelID}
@@ -243,7 +243,7 @@ func (p *Plugin) handleCreateTestEvent(w http.ResponseWriter, r *http.Request) {
 
 	if err := p.store.AddEvent(teamID, event); err != nil {
 		p.API.LogError("Failed to store admin test event", "error", err.Error())
-		http.Error(w, "Failed to store event", http.StatusInternalServerError)
+		p.writeAdminError(w, &webhookHandlerError{message: "Failed to store event", status: http.StatusInternalServerError, Code: "store_event_failed"})
 		return
 	}
 

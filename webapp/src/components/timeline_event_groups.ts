@@ -1,10 +1,12 @@
 import { useMemo } from "react";
+import { useMessages } from "../i18n";
 
 import type { EventEntry } from "../types/timeline";
 
 import { isTimelineEventActive } from "./timeline_entry_helpers";
 
-type TimelineEventGroup = {
+export type TimelineEventGroup = {
+  id: "events" | "active" | "history";
   label: string;
   events: EventEntry[];
 };
@@ -16,12 +18,13 @@ export function useTimelineEventGroups(
   groupedEvents: TimelineEventGroup[];
   renderedEvents: EventEntry[];
 } {
+  const { t } = useMessages();
   const displayEvents = useMemo(
     () => (isOldestFirst ? [...events].reverse() : events),
     [events, isOldestFirst],
   );
 
-  const groupedEvents = useMemo(() => {
+  const groupedEvents = useMemo<TimelineEventGroup[]>(() => {
     const activeEvents = displayEvents.filter((event) =>
       isTimelineEventActive(event),
     );
@@ -30,13 +33,13 @@ export function useTimelineEventGroups(
       (event) => !activeIds.has(event.id),
     );
     if (activeEvents.length === 0 || historyEvents.length === 0) {
-      return [{ label: "", events: displayEvents }];
+      return [{ id: "events", label: "", events: displayEvents }];
     }
     return [
-      { label: "Active", events: activeEvents },
-      { label: "History", events: historyEvents },
+      { id: "active", label: t("timeline.active"), events: activeEvents },
+      { id: "history", label: t("timeline.history"), events: historyEvents },
     ];
-  }, [displayEvents]);
+  }, [displayEvents, t]);
 
   const renderedEvents = useMemo(
     () => groupedEvents.flatMap((group) => group.events),

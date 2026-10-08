@@ -159,8 +159,8 @@ Use the local Mattermost UI after deployment:
 
 1. login with the provisioned admin
 2. open `http://localhost:18065/example-org/channels/town-square`
-3. confirm the channel header shows the Event Feed icon button
-4. click the Event Feed button and confirm the right-hand sidebar opens with the title `Event Feed`
+3. confirm the RHS rail shows the Events signal icon button (translated using the user's language)
+4. click the Events button and confirm the right-hand sidebar opens with the translated title `Events` and the same decorative signal icon
 5. run `post-sample-event.py` with `TIMELINE_CHANNEL_SCOPE=false`
 6. confirm the RHS shows the new `Timeline smoke test` event in `town-square`
 7. run `post-sample-event.py` with `TIMELINE_CHANNEL_SCOPE=true`
@@ -168,6 +168,8 @@ Use the local Mattermost UI after deployment:
 9. switch to another channel if available and confirm only the team-wide event remains visible there
 
 ## Local quality gates
+
+Configuration keys must use Mattermost's canonical lowercase names. Mixing legacy CamelCase aliases with native System Console keys can make the server choose values nondeterministically during loading. The configure helper normalizes its historical aliases without replacing explicit lowercase values. After changing custom setting controls, exercise native Save, reload the page, and read the event API to verify booleans and timeline order; confirm the existing webhook secret still works. UI callbacks alone do not prove the server applied the new values.
 
 Before claiming the smoke harness is ready, run the focused gates touched by this setup:
 

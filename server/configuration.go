@@ -1,19 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 )
 
 type configuration struct {
-	WebhookSecret          string `json:"WebhookSecret"`
-	WebhookTokens          string `json:"WebhookTokens"`
+	WebhookSecret         string `json:"WebhookSecret"`
+	WebhookTokens         string `json:"WebhookTokens"`
 	RequireSignedWebhooks bool   `json:"RequireSignedWebhooks"`
-	WebhookTools           string `json:"WebhookTools"`
-	MaxEventsStored        string `json:"MaxEventsStored"`
-	MaxEventsDisplayed     string `json:"MaxEventsDisplayed"`
-	TimelineOrder          string `json:"TimelineOrder"`
-	EnableReactions        bool   `json:"EnableReactions"`
+	WebhookTools          string `json:"WebhookTools"`
+	MaxEventsStored       string `json:"MaxEventsStored"`
+	MaxEventsDisplayed    string `json:"MaxEventsDisplayed"`
+	TimelineOrder         string `json:"TimelineOrder"`
+	EnableReactions       bool   `json:"EnableReactions"`
 }
 
 func (c *configuration) timelineOrder() TimelineOrder {
@@ -75,7 +78,42 @@ func (p *Plugin) setConfiguration(configuration *configuration) {
 func (p *Plugin) OnConfigurationChange() error {
 	configuration := new(configuration)
 
-	if err := p.API.LoadPluginConfiguration(configuration); err != nil {
+	settings := make(map[string]interface{})
+	if manifest.SettingsSchema != nil {
+		for _, setting := range manifest.SettingsSchema.Settings {
+			settings[strings.ToLower(setting.Key)] = setting.Default
+		}
+		for _, section := range manifest.SettingsSchema.Sections {
+			for _, setting := range section.Settings {
+				settings[strings.ToLower(setting.Key)] = setting.Default
+			}
+		}
+	}
+	config := p.API.GetUnsanitizedConfig()
+	if config == nil {
+		return fmt.Errorf("failed to load plugin configuration: server configuration unavailable")
+	}
+	stored := config.PluginSettings.Plugins[manifest.Id]
+	keys := make([]string, 0, len(stored))
+	for key := range stored {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		canonical := strings.ToLower(key)
+		// Native Mattermost saves use lowercase keys. Prefer them, including
+		// explicit empty/false values, over legacy aliases on every node.
+		if value, exists := stored[canonical]; exists {
+			settings[canonical] = value
+		} else {
+			settings[canonical] = stored[key]
+		}
+	}
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("failed to encode plugin configuration: %w", err)
+	}
+	if err := json.Unmarshal(encoded, configuration); err != nil {
 		return fmt.Errorf("failed to load plugin configuration: %w", err)
 	}
 

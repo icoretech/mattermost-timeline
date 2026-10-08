@@ -9,7 +9,19 @@ import {
   ThumbsUp,
   Wrench,
 } from "lucide-react";
+import type { MessageKey } from "../i18n";
 import reactionContract from "./reactions.json";
+
+export const REACTION_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
+  eyes: "reaction.eyes",
+  wrench: "reaction.wrench",
+  check: "reaction.check",
+  megaphone: "reaction.megaphone",
+  "thumbs-up": "reaction.thumbs-up",
+  hand: "reaction.hand",
+  party: "reaction.party",
+  heart: "reaction.heart",
+};
 
 export type ReactionDefinition = {
   icon: string;

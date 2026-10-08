@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { type MessageKey, useMessages } from "../i18n";
+import adminMessages from "../i18n/en/admin.json";
 import {
+  AdminAPIError,
   createTimelineTestEvent,
   fetchWebhookConfig,
   type SanitizedWebhookToken,
@@ -68,7 +71,7 @@ function normalizeToken(value: unknown): WebhookTokenValue {
 
 function parseTokensValue(value: unknown): {
   tokens: WebhookTokenValue[];
-  error: string;
+  error: Notice;
 } {
   const rawValue =
     typeof value === "string" && value.trim() === "" ? "[]" : value;
@@ -80,16 +83,14 @@ function parseTokensValue(value: unknown): {
     if (!Array.isArray(parsed)) {
       return {
         tokens: [],
-        error:
-          "Invalid Webhook Tokens JSON: expected an array of token objects.",
+        error: { key: "admin.invalidArray" },
       };
     }
     return { tokens: parsed.map(normalizeToken), error: "" };
   } catch {
     return {
       tokens: [],
-      error:
-        "Invalid Webhook Tokens JSON: fix the saved value before editing tokens.",
+      error: { key: "admin.invalidJSON" },
     };
   }
 }
@@ -120,8 +121,34 @@ function tokensForRequest(tokens: WebhookTokenValue[]) {
   }));
 }
 
-function messageFromError(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+type Notice =
+  | ""
+  | { key: MessageKey; values?: Record<string, string | number> };
+
+function isAdminMessageKey(key: string): key is keyof typeof adminMessages {
+  return Object.hasOwn(adminMessages, key);
+}
+
+function messageFromError(error: unknown, fallback: MessageKey): Notice {
+  if (error instanceof AdminAPIError) {
+    if (error.status === 401) return { key: "admin.error.unauthorized" };
+    if (error.status === 403) return { key: "admin.error.forbidden" };
+    const key = `admin.error.${error.code}`;
+    if (isAdminMessageKey(key)) return { key, values: error.params };
+    if (error.code !== "unknown") {
+      console.error("Unrecognized timeline admin error", {
+        status: error.status,
+        code: error.code,
+      });
+    }
+    return { key: "admin.httpError", values: { status: error.status } };
+  }
+  return { key: fallback };
+}
+
+function useNotice() {
+  const { t } = useMessages();
+  return (notice: Notice) => (notice ? t(notice.key, notice.values) : "");
 }
 
 const emptyToken = (): WebhookTokenValue => ({
@@ -138,14 +165,14 @@ type TokenEditorState = {
   tokens: WebhookTokenValue[];
   dirty: boolean;
   request: "idle" | "loading" | "saving";
-  loadError: string;
-  saveError: string;
-  saveMessage: string;
+  loadError: Notice;
+  saveError: Notice;
+  saveMessage: Notice;
 };
 
 type TokenEditorAction =
   | { type: "loaded" | "saved"; tokens: WebhookTokenValue[] }
-  | { type: "loadFailed" | "saveFailed"; error: string }
+  | { type: "loadFailed" | "saveFailed"; error: Notice }
   | { type: "add"; token: WebhookTokenValue }
   | { type: "update"; rowId: string; updates: Partial<WebhookTokenValue> }
   | { type: "remove"; rowId: string }
@@ -164,7 +191,7 @@ function tokenEditorReducer(
         request: "idle",
         loadError: "",
         saveError: "",
-        saveMessage: action.type === "saved" ? "Tokens saved" : "",
+        saveMessage: action.type === "saved" ? { key: "admin.saved" } : "",
       };
     case "loadFailed":
       return { ...state, request: "idle", loadError: action.error };
@@ -203,27 +230,28 @@ function WebhookTokenRow({
   onChange: (updates: Partial<WebhookTokenValue>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useMessages();
   return (
     <fieldset className="timeline-token-settings__row">
       <legend className="timeline-token-settings__row-header">
-        <span>{`Token ${tokenNumber}`}</span>
+        <span>{t("admin.token", { number: tokenNumber })}</span>
         <button
-          aria-label={`Remove token ${tokenNumber}`}
+          aria-label={t("admin.removeToken", { number: tokenNumber })}
           className="timeline-token-settings__button timeline-token-settings__button--danger"
           type="button"
           disabled={disabled}
           onClick={onRemove}
         >
-          {"Remove"}
+          {t("admin.remove")}
         </button>
       </legend>
       <div className="timeline-token-settings__grid">
         <label className="timeline-token-settings__field">
-          <span>{"Name"}</span>
+          <span>{t("admin.name")}</span>
           <input
-            aria-label={`Token ${tokenNumber} name`}
+            aria-label={t("admin.tokenName", { number: tokenNumber })}
             aria-describedby={`${token.rowId}-name-help`}
-            placeholder="e.g. deploy-bot"
+            placeholder={t("admin.namePlaceholder")}
             disabled={disabled}
             type="text"
             value={token.name}
@@ -233,15 +261,13 @@ function WebhookTokenRow({
             id={`${token.rowId}-name-help`}
             className="timeline-token-settings__help"
           >
-            {
-              "A unique name for this integration. Used as the event source when the sender omits source."
-            }
+            {t("admin.nameHelp")}
           </small>
         </label>
         <label className="timeline-token-settings__field">
-          <span>{"Secret"}</span>
+          <span>{t("admin.secret")}</span>
           <input
-            aria-label={`Token ${tokenNumber} secret`}
+            aria-label={t("admin.tokenSecret", { number: tokenNumber })}
             aria-describedby={`${token.rowId}-secret-help`}
             autoComplete="new-password"
             disabled={disabled}
@@ -255,18 +281,16 @@ function WebhookTokenRow({
             id={`${token.rowId}-secret-help`}
             className="timeline-token-settings__help"
           >
-            {
-              "New or renamed tokens need a secret before they can be enabled. Leave blank to keep an existing token's secret."
-            }
+            {t("admin.secretHelp")}
           </small>
         </label>
         <label className="timeline-token-settings__field timeline-token-settings__field--wide">
-          <span>{"Allowed team (optional)"}</span>
+          <span>{t("admin.allowedTeam")}</span>
           <input
-            aria-label={`Token ${tokenNumber} team`}
+            aria-label={t("admin.tokenTeam", { number: tokenNumber })}
             aria-describedby={`${token.rowId}-team-help`}
             disabled={disabled}
-            placeholder="e.g. example-org"
+            placeholder={t("admin.teamPlaceholder")}
             type="text"
             value={token.team}
             onChange={(event) => onChange({ team: event.currentTarget.value })}
@@ -275,16 +299,16 @@ function WebhookTokenRow({
             id={`${token.rowId}-team-help`}
             className="timeline-token-settings__help"
           >
-            {"Leave blank for any team, or enter one team name or ID."}
+            {t("admin.teamHelp")}
           </small>
         </label>
         <label className="timeline-token-settings__field timeline-token-settings__field--wide">
-          <span>{"Allowed channels (optional)"}</span>
+          <span>{t("admin.allowedChannels")}</span>
           <textarea
-            aria-label={`Token ${tokenNumber} channels`}
+            aria-label={t("admin.tokenChannels", { number: tokenNumber })}
             aria-describedby={`${token.rowId}-channels-help`}
             disabled={disabled}
-            placeholder="e.g. town-square, alerts"
+            placeholder={t("admin.channelsPlaceholder")}
             rows={2}
             value={token.channels.join("\n")}
             onChange={(event) =>
@@ -297,16 +321,14 @@ function WebhookTokenRow({
             id={`${token.rowId}-channels-help`}
             className="timeline-token-settings__help"
           >
-            {
-              "Leave blank for all channels and team-wide events. To restrict delivery, list channel names or IDs separated by commas or new lines. The sender must include allowed channels in its payload."
-            }
+            {t("admin.channelsHelp")}
           </small>
         </label>
       </div>
       <div className="timeline-token-settings__checks">
         <label>
           <input
-            aria-label={`Token ${tokenNumber} enabled`}
+            aria-label={t("admin.tokenEnabled", { number: tokenNumber })}
             checked={token.enabled}
             disabled={disabled}
             type="checkbox"
@@ -316,11 +338,11 @@ function WebhookTokenRow({
               })
             }
           />
-          <span>{"Accept events"}</span>
+          <span>{t("admin.acceptEvents")}</span>
         </label>
         <label>
           <input
-            aria-label={`Token ${tokenNumber} require signature`}
+            aria-label={t("admin.tokenSignature", { number: tokenNumber })}
             checked={token.require_signature}
             disabled={disabled}
             type="checkbox"
@@ -330,13 +352,11 @@ function WebhookTokenRow({
               })
             }
           />
-          <span>{"Require signed requests"}</span>
+          <span>{t("admin.requireSigned")}</span>
         </label>
       </div>
       <small className="timeline-token-settings__help">
-        {
-          "Uncheck Accept events to pause this integration without deleting its token."
-        }
+        {t("admin.pauseHelp")}
       </small>
     </fieldset>
   );
@@ -363,51 +383,41 @@ export function WebhookTokensSetting({
 }
 
 function WebhookRequestHelp() {
+  const { t } = useMessages();
   return (
     <details className="timeline-token-settings__guide">
-      <summary>{"How to send events"}</summary>
-      <p>
-        {
-          "Copy a webhook URL below and replace its team_id value with a team name or ID. Send a JSON body with a title, for example:"
-        }
-      </p>
-      <pre>
-        <code>{'{"title":"Deployment completed","status":"success"}'}</code>
-      </pre>
-      <p>
-        {"For unsigned requests, send the token's secret in the "}
-        <code>{"X-Webhook-Secret"}</code>
-        {" header."}
-      </p>
-      <p>
-        {"When signatures are required, send "}
-        <code>{"X-Timeline-Timestamp"}</code>
-        {" (Unix seconds) and "}
-        <code>{"X-Timeline-Signature"}</code>
-        {
-          ". Sign the timestamp, a dot and the exact request body with HMAC-SHA256 and the token secret:"
-        }
-      </p>
+      <summary>{t("admin.sendHelp")}</summary>
+      <p>{t("admin.sendIntro")}</p>
       <pre>
         <code>
-          {
-            "X-Timeline-Timestamp: <unix-seconds>\nX-Timeline-Signature: sha256=<hex-hmac>\n\nmessage to sign = <unix-seconds>.<request-body>"
-          }
+          {JSON.stringify({
+            title: t("admin.exampleTitle"),
+            status: "success",
+          })}
         </code>
       </pre>
-      <p>
-        {
-          "Use a fresh timestamp for each request. Timestamps outside a five-minute window and repeated signatures are rejected."
-        }
-      </p>
+      <p>{t("admin.unsignedHelp")}</p>
+      <p>{t("admin.signedHelp")}</p>
+      <pre>
+        <code>
+          {`X-Timeline-Timestamp: <unix-seconds>\nX-Timeline-Signature: sha256=<hex-hmac>\n\n${t("admin.signatureMessage")}`}
+        </code>
+      </pre>
+      <p>{t("admin.timestampHelp")}</p>
     </details>
   );
 }
 
 function useWebhookTokenEditor(
   initialTokens: WebhookTokenValue[],
-  parseError: string,
+  parseError: Notice,
 ) {
+  const requests = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    requests.current = controller;
+    return () => controller.abort();
+  }, []);
   const shouldLoadTokens = !parseError && initialTokens.length === 0;
   const [state, dispatch] = useReducer(tokenEditorReducer, {
     tokens: initialTokens,
@@ -434,10 +444,7 @@ function useWebhookTokenEditor(
         if (controller.signal.aborted) return;
         dispatch({
           type: "loadFailed",
-          error: messageFromError(
-            error,
-            "Failed to load webhook token credentials",
-          ),
+          error: messageFromError(error, "admin.loadTokensFailed"),
         });
       },
     );
@@ -449,18 +456,21 @@ function useWebhookTokenEditor(
   const savingRef = useRef(false);
   const saveTokens = async () => {
     if (savingRef.current) return;
+    const signal = requests.current?.signal;
     savingRef.current = true;
     dispatch({ type: "saveStarted" });
     try {
-      const data = await updateWebhookTokens(tokensForRequest(state.tokens));
+      const data = await updateWebhookTokens(
+        tokensForRequest(state.tokens),
+        signal,
+      );
+      if (signal?.aborted) return;
       dispatch({ type: "saved", tokens: tokenRowsFromSanitized(data.tokens) });
     } catch (error) {
+      if (signal?.aborted) return;
       dispatch({
         type: "saveFailed",
-        error: messageFromError(
-          error,
-          "Failed to save webhook token credentials",
-        ),
+        error: messageFromError(error, "admin.saveTokensFailed"),
       });
     } finally {
       savingRef.current = false;
@@ -480,11 +490,12 @@ function TokenEditorActions({
 }: {
   dirty: boolean;
   isSaving: boolean;
-  saveMessage: string;
+  saveMessage: Notice;
   controlsDisabled: boolean;
   onAdd: () => void;
   onSave: () => void;
 }) {
+  const { t } = useMessages();
   const canSave = dirty && !controlsDisabled;
   return (
     <div className="timeline-token-settings__actions">
@@ -494,7 +505,7 @@ function TokenEditorActions({
         disabled={controlsDisabled}
         onClick={onAdd}
       >
-        {"Add token"}
+        {t("admin.addToken")}
       </button>
       <button
         className="timeline-token-settings__button timeline-token-settings__button--primary"
@@ -502,11 +513,11 @@ function TokenEditorActions({
         disabled={!canSave}
         onClick={onSave}
       >
-        {isSaving ? "Saving..." : "Save tokens"}
+        {isSaving ? t("admin.saving") : t("admin.saveTokens")}
       </button>
       {dirty && !isSaving && !saveMessage && (
         <span className="timeline-token-settings__note" role="status">
-          {"Unsaved token changes"}
+          {t("admin.unsaved")}
         </span>
       )}
     </div>
@@ -518,15 +529,16 @@ function TokenEditorMessage({
   message,
 }: {
   kind: "error" | "message";
-  message: string;
+  message: Notice;
 }) {
+  const notice = useNotice();
   if (!message) return null;
   return (
     <div
       className={`timeline-token-settings__${kind}`}
       role={kind === "error" ? "alert" : "status"}
     >
-      {message}
+      {notice(message)}
     </div>
   );
 }
@@ -537,9 +549,10 @@ function WebhookTokensEditor({
   disabled,
 }: {
   initialTokens: WebhookTokenValue[];
-  parseError: string;
+  parseError: Notice;
   disabled: boolean;
 }) {
+  const { t, locale } = useMessages();
   const { state, dispatch, saveTokens } = useWebhookTokenEditor(
     initialTokens,
     parseError,
@@ -551,15 +564,13 @@ function WebhookTokensEditor({
     disabled || Boolean(parseError) || isLoading || isSaving;
 
   return (
-    <div className="timeline-token-settings">
-      <p className="timeline-token-settings__intro">
-        {
-          "Create one token per integration. Give it a name and secret, then choose which teams and channels it can publish to."
-        }
-      </p>
+    <div className="timeline-token-settings" lang={locale}>
+      <p>{t("settings.intro")}</p>
+      <h3>{t("settings.WebhookTokens.label")}</h3>
+      <p className="timeline-token-settings__intro">{t("admin.tokensIntro")}</p>
       <TokenEditorMessage
         kind="message"
-        message={isLoading ? "Loading token credentials..." : ""}
+        message={isLoading ? { key: "admin.loadingTokens" } : ""}
       />
       <TokenEditorMessage kind="error" message={parseError || loadError} />
       <div className="timeline-token-settings__rows">
@@ -578,7 +589,7 @@ function WebhookTokensEditor({
       </div>
       {tokens.length === 0 && !parseError && !isLoading && (
         <div className="timeline-token-settings__empty">
-          {"No tokens yet. Select Add token to connect your first integration."}
+          {t("admin.noTokens")}
         </div>
       )}
       <TokenEditorActions
@@ -597,6 +608,8 @@ function WebhookTokensEditor({
 }
 
 export default function AdminSettings() {
+  const { t, locale } = useMessages();
+  const notice = useNotice();
   const [loadState, setLoadState] = useState<
     | { kind: "loading" }
     | { kind: "ready"; config: WebhookConfigResponse }
@@ -605,22 +618,22 @@ export default function AdminSettings() {
   const config = loadState.kind === "ready" ? loadState.config : null;
   const [teamId, setTeamId] = useState("");
   const [channelId, setChannelId] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [message, setMessage] = useState<Notice>("");
+  const [error, setError] = useState<Notice>("");
   const [isSending, setIsSending] = useState(false);
   const sendingRef = useRef(false);
+  const requests = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    requests.current = controller;
     void fetchWebhookConfig(controller.signal).then(
       (config) => {
         if (!controller.signal.aborted) setLoadState({ kind: "ready", config });
       },
       (loadError: unknown) => {
         if (!controller.signal.aborted) {
-          setError(
-            messageFromError(loadError, "Failed to load webhook configuration"),
-          );
+          setError(messageFromError(loadError, "admin.loadConfigFailed"));
           setLoadState({ kind: "failed" });
         }
       },
@@ -629,33 +642,38 @@ export default function AdminSettings() {
   }, []);
 
   const copyPath = async (path: string) => {
+    const signal = requests.current?.signal;
     setError("");
     setMessage("");
     try {
       if (!navigator.clipboard) throw new Error("Clipboard unavailable");
       const url = new URL(path, window.location.origin);
       await navigator.clipboard.writeText(url.toString());
-      setMessage("Webhook URL copied");
+      if (signal?.aborted) return;
+      setMessage({ key: "admin.copied" });
     } catch {
-      setError("Clipboard is not available in this browser");
+      if (signal?.aborted) return;
+      setError({ key: "admin.clipboardFailed" });
     }
   };
 
   const sendTestEvent = async () => {
     if (sendingRef.current) return;
+    const signal = requests.current?.signal;
     sendingRef.current = true;
     setError("");
     setMessage("");
     setIsSending(true);
     try {
-      const event = await createTimelineTestEvent(teamId, channelId);
-      setMessage(`Created ${event.title} (${event.id})`);
+      const event = await createTimelineTestEvent(teamId, channelId, signal);
+      if (signal?.aborted) return;
+      setMessage({
+        key: "admin.created",
+        values: { title: event.title, id: event.id },
+      });
     } catch (sendError) {
-      setError(
-        sendError instanceof Error
-          ? sendError.message
-          : "Failed to send test event",
-      );
+      if (signal?.aborted) return;
+      setError(messageFromError(sendError, "admin.sendFailed"));
     } finally {
       sendingRef.current = false;
       setIsSending(false);
@@ -664,74 +682,79 @@ export default function AdminSettings() {
 
   if (loadState.kind === "loading") {
     return (
-      <div className="timeline-admin-settings" role="status">
-        {"Loading webhook tools..."}
+      <div className="timeline-admin-settings" lang={locale} role="status">
+        {t("admin.loadingTools")}
       </div>
     );
   }
 
   return (
-    <div className="timeline-admin-settings">
+    <div className="timeline-admin-settings" lang={locale}>
+      <h3>{t("settings.WebhookTools.label")}</h3>
       {config && (
         <section
-          aria-label="Webhook configuration status"
+          aria-label={t("admin.configurationStatus")}
           className="timeline-admin-settings__section"
         >
           <div className="timeline-admin-settings__section-header">
-            <strong>{"Webhook endpoints"}</strong>
-            <span>
-              {
-                "Use the webhook URL for one event, or the batch URL for up to 50 events."
-              }
-            </span>
+            <strong>{t("admin.endpoints")}</strong>
+            <span>{t("admin.endpointsHelp")}</span>
           </div>
           <dl className="timeline-admin-settings__status-grid">
             <div>
               <dt>
-                {"Shared secret "}
+                {t("admin.sharedSecret")}{" "}
                 <span className="timeline-admin-settings__legacy">
-                  {"Legacy"}
+                  {t("admin.legacy")}
                 </span>
               </dt>
               <dd>
                 {config.legacy_secret_configured
-                  ? "configured"
-                  : "not configured"}
+                  ? t("admin.configured")
+                  : t("admin.notConfigured")}
               </dd>
             </div>
             <div>
-              <dt>{"Signed webhooks"}</dt>
+              <dt>{t("admin.signedWebhooks")}</dt>
               <dd>
                 {config.require_signed_webhooks
-                  ? "required for all"
-                  : "set per token"}
+                  ? t("admin.requiredAll")
+                  : t("admin.perToken")}
               </dd>
             </div>
             <div>
-              <dt>{"Configured tokens"}</dt>
+              <dt>{t("admin.configuredTokens")}</dt>
               <dd>{config.tokens.length}</dd>
             </div>
           </dl>
           {config.tokens.length > 0 && (
             <ul
-              aria-label="Configured webhook tokens"
+              aria-label={t("admin.configuredTokensLabel")}
               className="timeline-admin-settings__tokens"
             >
               {config.tokens.map((token) => (
-                <li key={token.name || "unnamed"}>
+                <li key={token.name || t("admin.unnamed")}>
                   <span className="timeline-admin-settings__token-name">
-                    {token.name || "unnamed"}
+                    {token.name || t("admin.unnamed")}
                   </span>
-                  {!token.enabled && <span>{"disabled"}</span>}
+                  {!token.enabled && <span>{t("admin.disabled")}</span>}
                   {(config.require_signed_webhooks ||
                     token.require_signature) && (
-                    <span>{"signature required"}</span>
+                    <span>{t("admin.signatureRequired")}</span>
                   )}
-                  <span>{token.team ? `team: ${token.team}` : "any team"}</span>
+                  <span>
+                    {token.team
+                      ? t("admin.teamScope", { team: token.team })
+                      : t("admin.anyTeam")}
+                  </span>
                   {token.channels?.length ? (
-                    <span>{`channels: ${token.channels.join(", ")}`}</span>
+                    <span>
+                      {t("admin.channelScope", {
+                        channels: token.channels.join(", "),
+                      })}
+                    </span>
                   ) : (
-                    <span>{"all channels"}</span>
+                    <span>{t("admin.allChannels")}</span>
                   )}
                 </li>
               ))}
@@ -739,32 +762,28 @@ export default function AdminSettings() {
           )}
           <div className="timeline-admin-settings__actions">
             <button type="button" onClick={() => copyPath(config.webhook_path)}>
-              {"Copy webhook URL"}
+              {t("admin.copyWebhook")}
             </button>
             <button
               type="button"
               onClick={() => copyPath(config.batch_webhook_path)}
             >
-              {"Copy batch URL"}
+              {t("admin.copyBatch")}
             </button>
           </div>
         </section>
       )}
       <section
-        aria-label="Send a timeline test event"
+        aria-label={t("admin.testLabel")}
         className="timeline-admin-settings__section timeline-admin-settings__section--test"
       >
         <div className="timeline-admin-settings__section-header">
-          <strong>{"Send a test event"}</strong>
-          <span>
-            {
-              "Create an event in the selected team or channel. This checks timeline delivery, not webhook authentication or signatures."
-            }
-          </span>
+          <strong>{t("admin.testTitle")}</strong>
+          <span>{t("admin.testHelp")}</span>
         </div>
         <div className="timeline-admin-settings__form">
           <label>
-            <span>{"Team name or ID"}</span>
+            <span>{t("admin.teamInput")}</span>
             <input
               placeholder="example-org"
               type="text"
@@ -773,27 +792,27 @@ export default function AdminSettings() {
             />
           </label>
           <label>
-            <span>{"Channel name or ID (optional)"}</span>
+            <span>{t("admin.channelInput")}</span>
             <input
-              placeholder="optional, e.g. town-square"
+              placeholder={t("admin.channelInputPlaceholder")}
               type="text"
               value={channelId}
               onChange={(event) => setChannelId(event.currentTarget.value)}
             />
           </label>
           <button type="button" disabled={isSending} onClick={sendTestEvent}>
-            {isSending ? "Sending..." : "Send test event"}
+            {isSending ? t("admin.sending") : t("admin.sendTest")}
           </button>
         </div>
       </section>
       {message && (
         <div className="timeline-admin-settings__message" role="status">
-          {message}
+          {notice(message)}
         </div>
       )}
       {error && (
         <div className="timeline-admin-settings__error" role="alert">
-          {error}
+          {notice(error)}
         </div>
       )}
     </div>

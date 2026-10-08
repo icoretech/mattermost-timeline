@@ -3,6 +3,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { vi } from "vitest";
 
 import manifest from "../manifest";
+import { withIntl } from "../test_utils";
+
+function renderIntl(root: Root, children: React.ReactNode) {
+  root.render(withIntl(children));
+}
+
 import AdminSettings, { WebhookTokensSetting } from "./admin_settings";
 
 async function renderAdminSettings() {
@@ -11,7 +17,7 @@ async function renderAdminSettings() {
   const root = createRoot(container);
 
   await act(async () => {
-    root.render(<AdminSettings />);
+    renderIntl(root, <AdminSettings />);
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -39,7 +45,10 @@ async function renderWebhookTokensSetting({
   const root = createRoot(container);
 
   await act(async () => {
-    root.render(<WebhookTokensSetting value={value} disabled={disabled} />);
+    renderIntl(
+      root,
+      <WebhookTokensSetting value={value} disabled={disabled} />,
+    );
     await flushAsyncUpdates();
   });
 
@@ -109,6 +118,7 @@ function mockWebhookConfigResponse(
 function mockTextResponse(ok: boolean, text: string) {
   return {
     ok,
+    status: ok ? 200 : 500,
     text: () => Promise.resolve(text),
   } as Response;
 }
@@ -117,6 +127,69 @@ describe("WebhookTokensSetting", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
+  });
+
+  it("retranslates a validation notice on locale change without losing token drafts", async () => {
+    const value = JSON.stringify([
+      { name: "sample-token", secret: "sample-secret" },
+    ]);
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockTextResponse(
+        false,
+        JSON.stringify({
+          code: "token_name_duplicate",
+          params: { name: "edited-token" },
+        }),
+      ),
+    );
+    const { container, root } = await renderWebhookTokensSetting({ value });
+    await act(async () => {
+      changeInputValue(tokenInput(container, "Token 1 name"), "edited-token");
+      await flushAsyncUpdates();
+    });
+    await act(async () => {
+      tokenButton(container, "Save tokens").click();
+      await flushAsyncUpdates();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "A token named edited-token already exists.",
+    );
+    await act(async () => {
+      root.render(withIntl(<WebhookTokensSetting value={value} />, "ko"));
+      await flushAsyncUpdates();
+    });
+    const alert = container.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toContain("edited-token");
+    expect(alert).not.toContain("A token named");
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="text"]')?.value,
+    ).toBe("edited-token");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    await cleanup(root, container);
+  });
+
+  it("cancels a pending token save when the editor unmounts", async () => {
+    const pending = Promise.withResolvers<Response>();
+    globalThis.fetch = vi.fn().mockReturnValue(pending.promise);
+    const { container, root } = await renderWebhookTokensSetting({
+      value: JSON.stringify([
+        { name: "sample-token", secret: "sample-secret" },
+      ]),
+    });
+    await act(async () => {
+      changeInputValue(tokenInput(container, "Token 1 name"), "edited-token");
+      await flushAsyncUpdates();
+    });
+    await act(async () => tokenButton(container, "Save tokens").click());
+    const signal = vi.mocked(globalThis.fetch).mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    await cleanup(root, container);
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      pending.resolve(mockWebhookConfigResponse());
+      await flushAsyncUpdates();
+    });
+    expect(container.childElementCount).toBe(0);
   });
 
   it("connects scope hints to the fields and provides expandable sending instructions", async () => {
@@ -347,10 +420,16 @@ describe("WebhookTokensSetting", () => {
     await cleanup(root, container);
   });
 
-  it("renders failed token-save response text as an alert", async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue(mockTextResponse(false, "duplicate token name"));
+  it("renders structured token-save validation as a localized alert", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockTextResponse(
+        false,
+        JSON.stringify({
+          code: "token_name_duplicate",
+          params: { name: "deploy-prod" },
+        }),
+      ),
+    );
     const { container, root } = await renderWebhookTokensSetting({
       value: JSON.stringify([
         {
@@ -374,7 +453,7 @@ describe("WebhookTokensSetting", () => {
     });
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "duplicate token name",
+      "A token named deploy-prod already exists.",
     );
 
     await cleanup(root, container);
@@ -413,7 +492,8 @@ describe("WebhookTokensSetting", () => {
       await flushAsyncUpdates();
     });
     await act(async () => {
-      root.render(
+      renderIntl(
+        root,
         <WebhookTokensSetting
           value={JSON.stringify(savedTokens, null, 2)}
           disabled={true}
@@ -428,7 +508,7 @@ describe("WebhookTokensSetting", () => {
     expect(container.textContent).toContain("Unsaved token changes");
 
     await act(async () => {
-      root.render(<WebhookTokensSetting value={value} />);
+      renderIntl(root, <WebhookTokensSetting value={value} />);
       await flushAsyncUpdates();
     });
 
@@ -440,9 +520,15 @@ describe("WebhookTokensSetting", () => {
   });
 
   it("resets drafts and save errors when the saved credentials change", async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue(mockTextResponse(false, "duplicate token name"));
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockTextResponse(
+        false,
+        JSON.stringify({
+          code: "token_name_duplicate",
+          params: { name: "deploy-prod" },
+        }),
+      ),
+    );
     const { container, root } = await renderWebhookTokensSetting({
       value: JSON.stringify([
         { name: "sample-token", secret: "sample-secret" },
@@ -459,11 +545,12 @@ describe("WebhookTokensSetting", () => {
     });
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "duplicate token name",
+      "A token named deploy-prod already exists.",
     );
 
     await act(async () => {
-      root.render(
+      renderIntl(
+        root,
         <WebhookTokensSetting
           value={JSON.stringify([{ name: "replacement-token" }])}
         />,
@@ -493,7 +580,8 @@ describe("WebhookTokensSetting", () => {
     expect(signal?.aborted).toBe(false);
 
     await act(async () => {
-      root.render(
+      renderIntl(
+        root,
         <WebhookTokensSetting
           value={JSON.stringify([{ name: "replacement-token" }])}
         />,
@@ -527,7 +615,7 @@ describe("WebhookTokensSetting", () => {
     const { container, root } = await renderWebhookTokensSetting();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "configuration unavailable",
+      "Request failed (HTTP 500).",
     );
     expect(container.textContent).not.toContain("Loading token credentials...");
     expect(tokenButton(container, "Add token").disabled).toBe(false);
@@ -568,6 +656,29 @@ describe("AdminSettings", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
+  });
+
+  it("uses localized HTTP fallback and metadata diagnostics for unknown error codes", async () => {
+    const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockTextResponse(
+        false,
+        JSON.stringify({
+          code: "future_server_error",
+          message: "internal diagnostic must not appear in the UI",
+        }),
+      ),
+    );
+    const { container, root } = await renderAdminSettings();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Request failed (HTTP 500).",
+    );
+    expect(container.textContent).not.toContain("internal diagnostic");
+    expect(diagnostic).toHaveBeenCalledWith(
+      "Unrecognized timeline admin error",
+      { status: 500, code: "future_server_error" },
+    );
+    await cleanup(root, container);
   });
 
   it("renders sanitized webhook config status without exposing secrets", async () => {
@@ -760,7 +871,7 @@ describe("AdminSettings", () => {
       await flushAsyncUpdates();
     });
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "temporary failure",
+      "Request failed (HTTP 500).",
     );
     expect(button.disabled).toBe(false);
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({

@@ -9,7 +9,6 @@ import {
   type Store,
 } from "redux";
 import { vi } from "vitest";
-
 import {
   CLEAR_EVENTS,
   type EventFeedAction,
@@ -19,6 +18,7 @@ import {
 } from "../actions";
 import manifest from "../manifest";
 import reducer from "../reducer";
+import { withIntl } from "../test_utils";
 import { isEventFeedState } from "../timeline_validation";
 import type { EventEntry, EventFeedState } from "../types/timeline";
 import RHSView from "./rhs_view";
@@ -165,11 +165,7 @@ async function renderRHS(state: TestState) {
   const { store, actions } = makeStore(state);
 
   await act(async () => {
-    root.render(
-      <Provider store={store}>
-        <RHSView />
-      </Provider>,
-    );
+    root.render(<Provider store={store}>{withIntl(<RHSView />)}</Provider>);
     await Promise.resolve();
   });
 
@@ -215,6 +211,67 @@ describe("RHSView", () => {
     await cleanup(root, container);
   });
 
+  it("updates translated controls on locale changes while retaining filter values and integration content", async () => {
+    const state = makeState({
+      pluginState: makePluginState({
+        events: [
+          {
+            ...makeEvent("locale-event"),
+            title: "Integration title",
+            status: "closed",
+            custom_fields: [
+              { name: "release", label: "Release label", value: "v2" },
+            ],
+          },
+        ],
+      }),
+    });
+    const { store } = makeStore(state);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<Provider store={store}>{withIntl(<RHSView />)}</Provider>);
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(".event-feed-filter-toggle")
+        ?.click();
+    });
+    await act(async () => {
+      const status =
+        container.querySelector<HTMLSelectElement>("#status-filter");
+      if (!status) throw new Error("Missing status filter");
+      status.value = "closed";
+      status.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const englishLabel = container.querySelector(
+      ".event-feed-filter-toggle",
+    )?.textContent;
+    const requestCount = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await act(async () => {
+      root.render(
+        <Provider store={store}>{withIntl(<RHSView />, "it")}</Provider>,
+      );
+    });
+
+    expect(
+      container.querySelector(".event-feed-filter-toggle")?.textContent,
+    ).toBe("Filtri");
+    expect(
+      container.querySelector(".event-feed-filter-toggle")?.textContent,
+    ).not.toBe(englishLabel);
+    expect(
+      container.querySelector<HTMLSelectElement>("#status-filter")?.value,
+    ).toBe("closed");
+    expect(eventTitles(container)).toEqual(["Integration title"]);
+    expect(container.querySelector("dl dt")?.textContent).toBe("Release label");
+    expect(container.querySelector("dl dd")?.textContent).toBe("v2");
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(requestCount);
+    await cleanup(root, container);
+  });
+
   it("renders the compact search toolbar with filters collapsed", async () => {
     const { container, root } = await renderRHS(
       makeState({
@@ -237,6 +294,52 @@ describe("RHSView", () => {
     expect(container.querySelector("#event-feed-filter-panel")).toBeNull();
     expect(eventTitles(container)).toEqual(["event e1"]);
 
+    await cleanup(root, container);
+  });
+
+  it("keeps reaction picker state when translated group headings change", async () => {
+    const { store } = makeStore(
+      makeState({
+        pluginState: makePluginState({
+          events: [
+            { ...makeEvent("active"), status: "open" },
+            { ...makeEvent("history"), status: "closed" },
+          ],
+        }),
+      }),
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<Provider store={store}>{withIntl(<RHSView />)}</Provider>);
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(".reaction-bar__toggle")
+        ?.click();
+    });
+    const picker = container.querySelector(".reaction-bar__tray--open");
+    const headings = Array.from(
+      container.querySelectorAll(".event-feed-section-heading"),
+      (node) => node.textContent,
+    );
+    expect(headings).toEqual(["Active", "History"]);
+    expect(picker).not.toBeNull();
+
+    await act(async () => {
+      root.render(
+        <Provider store={store}>{withIntl(<RHSView />, "it")}</Provider>,
+      );
+    });
+
+    expect(
+      Array.from(
+        container.querySelectorAll(".event-feed-section-heading"),
+        (node) => node.textContent,
+      ),
+    ).not.toEqual(headings);
+    expect(container.querySelector(".reaction-bar__tray--open")).toBe(picker);
     await cleanup(root, container);
   });
 
@@ -349,11 +452,7 @@ describe("RHSView", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     await act(async () => {
-      root.render(
-        <Provider store={store}>
-          <RHSView />
-        </Provider>,
-      );
+      root.render(<Provider store={store}>{withIntl(<RHSView />)}</Provider>);
     });
     await act(async () => {
       container
@@ -671,7 +770,7 @@ describe("RHSView", () => {
 
     expect(actions).toContainEqual({
       type: SET_ERROR,
-      error: "Failed to add reaction",
+      error: "error.reaction",
     });
     expect(consoleError).toHaveBeenCalledWith(
       "Event Feed: failed to update reaction",
@@ -992,9 +1091,7 @@ describe("RHSView", () => {
 
     await act(async () => {
       root.render(
-        <Provider store={firstStore}>
-          <RHSView />
-        </Provider>,
+        <Provider store={firstStore}>{withIntl(<RHSView />)}</Provider>,
       );
       await Promise.resolve();
     });
@@ -1020,9 +1117,7 @@ describe("RHSView", () => {
 
     await act(async () => {
       root.render(
-        <Provider store={secondStore}>
-          <RHSView />
-        </Provider>,
+        <Provider store={secondStore}>{withIntl(<RHSView />)}</Provider>,
       );
       await Promise.resolve();
     });

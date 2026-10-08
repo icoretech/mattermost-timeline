@@ -1,14 +1,12 @@
 import React from "react";
+import { useMessages } from "../i18n";
 
 import type { TimestampDisplayPreferences } from "../selectors";
 import type { EventEntry, TimelineUser } from "../types/timeline";
 
 import TimelineEntry from "./timeline_entry";
-
-type TimelineEventGroup = {
-  label: string;
-  events: EventEntry[];
-};
+import type { TimelineEventGroup } from "./timeline_event_groups";
+import { TimelineSignalIcon } from "./timeline_signal_icon";
 
 type TimelineLoadState =
   | { kind: "loading" }
@@ -54,6 +52,7 @@ export default function TimelineEventList({
   timelineOrder,
   updatedEventIds,
 }: TimelineEventListProps) {
+  const { t, formatError } = useMessages();
   const isOldestFirst = timelineOrder === "oldest_first";
   const isLoading = loadState.kind === "loading";
   const renderEvent = (event: EventEntry) => (
@@ -79,16 +78,16 @@ export default function TimelineEventList({
       {isLoading && (
         <div className="event-feed-loading" role="status" aria-live="polite">
           <div className="event-feed-loading__spinner" />
-          <span>{"Loading events..."}</span>
+          <span>{t("timeline.loading")}</span>
         </div>
       )}
       {loadState.kind === "error" && (
         <div className="event-feed-error" role="alert">
-          <span>{loadState.message}</span>
+          <span>{formatError(loadState.message, "error.load")}</span>
         </div>
       )}
       {groupedEvents.map((group) => (
-        <React.Fragment key={group.label || "events"}>
+        <React.Fragment key={group.id}>
           {group.label && (
             <div className="event-feed-section-heading">{group.label}</div>
           )}
@@ -98,13 +97,11 @@ export default function TimelineEventList({
       {!isOldestFirst && loadMoreButton}
       {!isLoading && eventsCount === 0 && (
         <div className="event-feed-empty" role="status">
-          <span className="event-feed-empty__icon">{"📡"}</span>
-          <p className="event-feed-empty__title">{"No events yet"}</p>
-          <p className="event-feed-empty__hint">
-            {
-              "Send a webhook to this team or channel; new events appear here automatically."
-            }
-          </p>
+          <span className="event-feed-empty__icon">
+            <TimelineSignalIcon size={40} />
+          </span>
+          <p className="event-feed-empty__title">{t("timeline.emptyTitle")}</p>
+          <p className="event-feed-empty__hint">{t("timeline.emptyHint")}</p>
           {emptyEndpoint && (
             <code className="event-feed-empty__endpoint">{emptyEndpoint}</code>
           )}

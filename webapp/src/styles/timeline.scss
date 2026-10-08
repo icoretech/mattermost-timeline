@@ -23,6 +23,17 @@
   }
 }
 
+.timeline-sidebar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  vertical-align: middle;
+
+  > svg {
+    flex-shrink: 0;
+  }
+}
+
 .event-feed-timeline {
   display: flex;
   flex-direction: column;
@@ -100,11 +111,13 @@
 }
 
 .event-feed-filter-input {
-  flex: 1 1 92px;
+  flex: 1 1 128px;
+  min-width: min(128px, 100%);
 }
 
 .event-feed-filter-select {
-  flex: 1 1 96px;
+  flex: 1 1 128px;
+  min-width: min(128px, 100%);
 }
 
 .event-feed-filter-chip--active {
@@ -610,6 +623,92 @@
   }
 }
 
+.timeline-token-settings:lang(ko),
+.timeline-admin-settings:lang(ko),
+.timeline-localized-setting:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.timeline-localized-setting,
+.timeline-token-settings,
+.timeline-admin-settings {
+  margin-bottom: 24px;
+}
+
+.timeline-token-settings > h3,
+.timeline-token-settings > p,
+.timeline-admin-settings > h3,
+.timeline-admin-settings > p {
+  margin: 0;
+}
+
+.timeline-localized-setting {
+  width: min(100%, 620px);
+  color: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.88);
+  font-size: 13px;
+  line-height: 1.4;
+
+  > label {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 0;
+    font-weight: 600;
+  }
+
+  fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  legend {
+    margin-bottom: 8px;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+  }
+
+  fieldset label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 16px;
+    margin-bottom: 0;
+    font-weight: 400;
+  }
+
+  input:not([type="radio"]),
+  select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 1px solid rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.16);
+    border-radius: 4px;
+    background: rgba(var(--center-channel-bg-rgb, 255, 255, 255), 1);
+    color: inherit;
+    font: inherit;
+    font-weight: 400;
+  }
+
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid rgba(var(--button-bg-rgb, 28, 88, 217), 0.64);
+    outline-offset: 2px;
+  }
+
+  p {
+    margin: 8px 0 0;
+    color: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.76);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+}
+
 .timeline-token-settings,
 .timeline-admin-settings {
   --timeline-settings-border: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.16);
@@ -689,7 +788,7 @@
 .timeline-token-settings {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 
   &__intro {
     max-width: 62ch;

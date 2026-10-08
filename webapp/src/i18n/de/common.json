@@ -1,0 +1,13 @@
+{
+  "chrome.title": "Ereignisse",
+  "chrome.toggle": "Ereignisse ein- oder ausblenden",
+  "chrome.unread": "Es gibt ungelesene Ereignisse",
+  "error.load": "Ereignisse konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
+  "error.reaction": "Die Reaktion konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+  "error.unauthorized": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+  "error.forbidden": "Sie sind nicht berechtigt, diese Zeitleiste anzuzeigen oder zu ändern.",
+  "error.notFound": "Das angeforderte Ereignis wurde in der Zeitleiste nicht gefunden.",
+  "error.server": "Der Server konnte die Anfrage nicht abschließen. Bitte versuchen Sie es erneut.",
+  "error.network": "Der Server ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+  "error.invalidResponse": "Der Server hat eine ungültige Antwort zurückgegeben. Bitte versuchen Sie es erneut."
+}

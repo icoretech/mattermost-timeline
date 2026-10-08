@@ -38,8 +38,8 @@ var manifestStr = strings.Replace(`
     "bundle_path": "webapp/dist/main.js"
   },
   "settings_schema": {
-    "header": "Add a token for each integration, then copy a webhook URL and send events to your team or channel.",
-    "footer": "Select Save tokens to apply token changes. Use Save at the bottom for the other settings.",
+    "header": "",
+    "footer": "",
     "settings": [
       {
         "key": "WebhookTokens",
@@ -54,8 +54,8 @@ var manifestStr = strings.Replace(`
       {
         "key": "RequireSignedWebhooks",
         "display_name": "Require Signed Webhooks",
-        "type": "bool",
-        "help_text": "Require signatures for every token and the legacy secret. Enable only after all senders support signing. When disabled, individual tokens can still require a signature.",
+        "type": "custom",
+        "help_text": "",
         "placeholder": "",
         "default": false,
         "hosting": "",
@@ -64,8 +64,8 @@ var manifestStr = strings.Replace(`
       {
         "key": "WebhookSecret",
         "display_name": "Webhook Secret (legacy)",
-        "type": "text",
-        "help_text": "For existing integrations that share one secret. This secret has no team or channel restrictions. Use a token above for new integrations.",
+        "type": "custom",
+        "help_text": "",
         "placeholder": "",
         "default": "",
         "hosting": "",
@@ -84,8 +84,8 @@ var manifestStr = strings.Replace(`
       {
         "key": "MaxEventsStored",
         "display_name": "Maximum Events Stored",
-        "type": "text",
-        "help_text": "Events kept per team. Once this limit is reached, the oldest events are removed.",
+        "type": "custom",
+        "help_text": "",
         "placeholder": "",
         "default": "500",
         "hosting": "",
@@ -94,8 +94,8 @@ var manifestStr = strings.Replace(`
       {
         "key": "MaxEventsDisplayed",
         "display_name": "Maximum Events Displayed",
-        "type": "text",
-        "help_text": "Maximum number of events loaded per request. Users can load older events in the timeline.",
+        "type": "custom",
+        "help_text": "",
         "placeholder": "",
         "default": "100",
         "hosting": "",
@@ -104,28 +104,18 @@ var manifestStr = strings.Replace(`
       {
         "key": "TimelineOrder",
         "display_name": "Timeline Order",
-        "type": "dropdown",
-        "help_text": "Choose whether new events appear at the top or bottom of the timeline.",
+        "type": "custom",
+        "help_text": "",
         "placeholder": "",
         "default": "oldest_first",
-        "options": [
-          {
-            "display_name": "Oldest first (newest at bottom)",
-            "value": "oldest_first"
-          },
-          {
-            "display_name": "Newest first (newest at top)",
-            "value": "newest_first"
-          }
-        ],
         "hosting": "",
         "secret": false
       },
       {
         "key": "EnableReactions",
         "display_name": "Enable Reactions",
-        "type": "bool",
-        "help_text": "Let users add reactions to timeline events.",
+        "type": "custom",
+        "help_text": "",
         "placeholder": "",
         "default": true,
         "hosting": "",

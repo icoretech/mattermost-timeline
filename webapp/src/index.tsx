@@ -1,5 +1,6 @@
 import type { GlobalState } from "@mattermost/types/store";
 import React from "react";
+import { FormattedMessage } from "react-intl";
 import type { Reducer, Store } from "redux";
 import {
   hydratePopoutState,
@@ -11,11 +12,11 @@ import {
   setCurrentUserId,
   setViewContext,
 } from "./actions";
-import AdminSettings, {
-  WebhookTokensSetting,
-} from "./components/admin_settings";
+import { registerLocalizedAdminSettings } from "./components/admin_settings_registration";
 import Icon from "./components/icon";
 import RHSView from "./components/rhs_view";
+import { TimelineTitle } from "./components/timeline_title";
+import { getTranslations, messageDescriptor } from "./i18n";
 import manifest from "./manifest";
 import reducer from "./reducer";
 import { getPluginState } from "./selectors";
@@ -76,24 +77,9 @@ function isMarkPopoutContextReadPayload(
 
 export default class Plugin {
   public initialize(registry: PluginRegistry, store: Store<GlobalState>) {
+    registry.registerTranslations(getTranslations);
     registry.registerReducer(reducer as Reducer);
-    if (registry.registerAdminConsoleCustomSetting) {
-      registry.registerAdminConsoleCustomSetting(
-        "WebhookTools",
-        AdminSettings,
-        {
-          showTitle: true,
-        },
-      );
-
-      registry.registerAdminConsoleCustomSetting(
-        "WebhookTokens",
-        WebhookTokensSetting,
-        {
-          showTitle: true,
-        },
-      );
-    }
+    registerLocalizedAdminSettings(registry);
 
     const currentUserId = store.getState().entities.users.currentUserId || "";
     if (currentUserId) {
@@ -163,14 +149,14 @@ export default class Plugin {
 
     const { toggleRHSPlugin } = registry.registerRightHandSidebarComponent(
       RHSView,
-      "Event Feed",
+      <TimelineTitle />,
     );
 
     registry.registerChannelHeaderButtonAction(
       Icon,
       () => store.dispatch(toggleRHSPlugin),
-      "Event Feed",
-      "Toggle Event Feed",
+      <FormattedMessage {...messageDescriptor("chrome.title")} />,
+      <FormattedMessage {...messageDescriptor("chrome.toggle")} />,
     );
 
     registry.registerWebSocketEventHandler(

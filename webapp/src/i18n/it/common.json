@@ -1,0 +1,13 @@
+{
+  "chrome.title": "Eventi",
+  "chrome.toggle": "Apri o chiudi gli eventi",
+  "chrome.unread": "Ci sono eventi non letti",
+  "error.load": "Impossibile caricare gli eventi. Riprova.",
+  "error.reaction": "Impossibile aggiornare la reazione. Riprova.",
+  "error.unauthorized": "La sessione è scaduta. Accedi di nuovo.",
+  "error.forbidden": "Non hai i permessi per visualizzare o modificare questa cronologia.",
+  "error.notFound": "L'evento richiesto non è stato trovato nella cronologia.",
+  "error.server": "Il server non ha potuto completare la richiesta. Riprova.",
+  "error.network": "Impossibile raggiungere il server. Controlla la connessione e riprova.",
+  "error.invalidResponse": "Il server ha restituito una risposta non valida. Riprova."
+}

@@ -154,7 +154,7 @@ describe("custom fields at event boundaries", () => {
 
       expect(dispatch).toHaveBeenCalledWith({
         type: SET_ERROR,
-        error: "Invalid events response",
+        error: "error.invalidResponse",
       });
       expect(dispatch).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: RECEIVED_EVENTS }),

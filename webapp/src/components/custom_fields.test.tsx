@@ -1,38 +1,41 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { withIntl } from "../test_utils";
 import type { EventEntry } from "../types/timeline";
 import TimelineEntry from "./timeline_entry";
 
 function renderFields(custom_fields?: EventEntry["custom_fields"]) {
   const container = document.createElement("div");
   container.innerHTML = renderToStaticMarkup(
-    <TimelineEntry
-      event={{
-        id: "sample-event",
-        team_id: "sample-team",
-        timestamp: 1000,
-        title: "Sample event",
-        event_type: "info",
-        message: "Message",
-        status: "closed",
-        custom_fields,
-        links: [{ url: "https://example.com", label: "Details" }],
-      }}
-      isNew={false}
-      isUpdated={false}
-      onAnimationEnd={() => undefined}
-      onUpdateAnimationEnd={() => undefined}
-      enableReactions={true}
-      timestampDisplayPreferences={{
-        locale: "en",
-        timeZone: "UTC",
-        useMilitaryTime: true,
-      }}
-      onAddReaction={() => undefined}
-      onRemoveReaction={() => undefined}
-      onFetchReactionUsers={async () => []}
-      getUser={() => undefined}
-    />,
+    withIntl(
+      <TimelineEntry
+        event={{
+          id: "sample-event",
+          team_id: "sample-team",
+          timestamp: 1000,
+          title: "Sample event",
+          event_type: "info",
+          message: "Message",
+          status: "closed",
+          custom_fields,
+          links: [{ url: "https://example.com", label: "Details" }],
+        }}
+        isNew={false}
+        isUpdated={false}
+        onAnimationEnd={() => undefined}
+        onUpdateAnimationEnd={() => undefined}
+        enableReactions={true}
+        timestampDisplayPreferences={{
+          locale: "en",
+          timeZone: "UTC",
+          useMilitaryTime: true,
+        }}
+        onAddReaction={() => undefined}
+        onRemoveReaction={() => undefined}
+        onFetchReactionUsers={async () => []}
+        getUser={() => undefined}
+      />,
+    ),
   );
   return container;
 }

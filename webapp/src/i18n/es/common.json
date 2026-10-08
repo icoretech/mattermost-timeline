@@ -1,0 +1,13 @@
+{
+  "chrome.title": "Eventos",
+  "chrome.toggle": "Mostrar u ocultar eventos",
+  "chrome.unread": "Hay eventos sin leer",
+  "error.load": "No se pudieron cargar los eventos. Inténtalo de nuevo.",
+  "error.reaction": "No se pudo actualizar la reacción. Inténtalo de nuevo.",
+  "error.unauthorized": "Tu sesión ha caducado. Inicia sesión de nuevo.",
+  "error.forbidden": "No tienes permiso para ver o modificar esta cronología.",
+  "error.notFound": "No se encontró el evento solicitado en la cronología.",
+  "error.server": "El servidor no pudo completar la solicitud. Inténtalo de nuevo.",
+  "error.network": "No se puede conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+  "error.invalidResponse": "El servidor devolvió una respuesta no válida. Inténtalo de nuevo."
+}

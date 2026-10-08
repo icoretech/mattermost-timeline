@@ -2,6 +2,11 @@ import type { Dispatch } from "redux";
 
 import manifest from "./manifest";
 import {
+  errorKey,
+  httpErrorKey,
+  TimelineRequestError,
+} from "./timeline_errors";
+import {
   isEventEntry,
   isReactionSummaryMap,
   isRecord,
@@ -231,7 +236,7 @@ async function parseTimelineReadStateResponse(
 ): Promise<TimelineReadState> {
   const data: unknown = await response.json();
   if (!isTimelineReadStateResponse(data)) {
-    throw new Error("Invalid read state response");
+    throw new TimelineRequestError("error.invalidResponse");
   }
   return {
     version: data.version,
@@ -288,15 +293,16 @@ function isReactionUsersResponse(
 
 async function parseReactionMutationResponse(
   response: Response,
-  failureMessage: string,
 ): Promise<Record<string, ReactionClientSummary>> {
   if (!response.ok) {
-    throw new Error(failureMessage);
+    throw new TimelineRequestError(
+      httpErrorKey(response.status, "error.reaction"),
+    );
   }
 
   const data: unknown = await response.json();
   if (!isReactionSummaryMap(data)) {
-    throw new Error("Invalid reaction response");
+    throw new TimelineRequestError("error.invalidResponse");
   }
 
   return data;
@@ -351,11 +357,11 @@ export function fetchEvents(
         signal,
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new TimelineRequestError(httpErrorKey(response.status));
       }
       const data: unknown = await response.json();
       if (!isEventsResponse(data)) {
-        throw new Error("Invalid events response");
+        throw new TimelineRequestError("error.invalidResponse");
       }
       if (signal?.aborted) {
         return;
@@ -376,8 +382,7 @@ export function fetchEvents(
       if (signal?.aborted || isAbortError(error)) {
         return;
       }
-      const message =
-        error instanceof Error ? error.message : "Failed to load events";
+      const message = errorKey(error, "error.load");
       console.error("Event Feed: failed to fetch events", error);
       dispatch({ type: SET_ERROR, error: message });
     } finally {
@@ -550,10 +555,7 @@ export function addReaction(eventId: string, icon: string) {
         `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
         { method: "PUT", headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      const reactions = await parseReactionMutationResponse(
-        resp,
-        "Failed to add reaction",
-      );
+      const reactions = await parseReactionMutationResponse(resp);
       dispatch(receivedEventReactions(eventId, reactions));
       return reactions;
     } catch (err) {
@@ -583,10 +585,7 @@ export function removeReaction(eventId: string, icon: string) {
         `/plugins/${manifest.id}/api/v1/events/${eventId}/reactions/${icon}`,
         { method: "DELETE", headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      const reactions = await parseReactionMutationResponse(
-        resp,
-        "Failed to remove reaction",
-      );
+      const reactions = await parseReactionMutationResponse(resp);
       dispatch(receivedEventReactions(eventId, reactions));
       return reactions;
     } catch (err) {

@@ -222,7 +222,7 @@ describe("reaction mutation thunks", () => {
     } as Response);
 
     await expect(addReaction("e1", "eyes")(mockDispatch)).rejects.toThrow(
-      "Invalid reaction response",
+      "error.invalidResponse",
     );
 
     expect(mockDispatch).toHaveBeenLastCalledWith({
@@ -256,7 +256,7 @@ describe("reaction mutation thunks", () => {
     } as Response);
 
     await expect(removeReaction("e1", "eyes")(mockDispatch)).rejects.toThrow(
-      "Invalid reaction response",
+      "error.invalidResponse",
     );
 
     expect(mockDispatch).toHaveBeenLastCalledWith({
@@ -482,7 +482,7 @@ describe("fetchEvents", () => {
     );
     expect(errorAction?.[0]).toMatchObject({
       type: SET_ERROR,
-      error: "Invalid events response",
+      error: "error.invalidResponse",
     });
   });
 
@@ -630,7 +630,7 @@ describe("unread thunks", () => {
 
     await expect(
       markVisibleEventsRead("t1", "", ["e1"])(mockDispatch),
-    ).rejects.toThrow("Invalid read state response");
+    ).rejects.toThrow("error.invalidResponse");
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 });

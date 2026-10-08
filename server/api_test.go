@@ -698,7 +698,7 @@ func TestHandleUpdateWebhookTokens_PreservesExistingSecretByName(t *testing.T) {
 
 	api.On("HasPermissionTo", "admin-user", model.PermissionManageSystem).Return(true).Once()
 	api.On("SavePluginConfig", mock.MatchedBy(func(saved map[string]interface{}) bool {
-		rawTokens, ok := saved["WebhookTokens"].(string)
+		rawTokens, ok := saved["webhooktokens"].(string)
 		if !ok {
 			return false
 		}

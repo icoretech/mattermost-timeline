@@ -1,0 +1,13 @@
+{
+  "chrome.title": "Événements",
+  "chrome.toggle": "Afficher ou masquer les événements",
+  "chrome.unread": "Il y a des événements non lus",
+  "error.load": "Impossible de charger les événements. Veuillez réessayer.",
+  "error.reaction": "Impossible de mettre à jour la réaction. Veuillez réessayer.",
+  "error.unauthorized": "Votre session a expiré. Veuillez vous reconnecter.",
+  "error.forbidden": "Vous n’avez pas l’autorisation de consulter ou de modifier cette chronologie.",
+  "error.notFound": "L’événement de chronologie demandé est introuvable.",
+  "error.server": "Le serveur n’a pas pu traiter la requête. Veuillez réessayer.",
+  "error.network": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+  "error.invalidResponse": "Le serveur a renvoyé une réponse invalide. Veuillez réessayer."
+}

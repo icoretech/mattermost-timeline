@@ -33,6 +33,8 @@ If this plugin saves you dashboard-hopping, [star the repo](https://github.com/i
 
 Events stay in Mattermost plugin storage. No external timeline service is required.
 
+The sidebar and plugin settings follow your Mattermost language preference, with English, Korean, Italian, Spanish, French, German and Brazilian Portuguese translations and English fallback. Content supplied by integrations stays in its original language. Native-speaker reviews and translation improvements are welcome; see [Contributing translations](CONTRIBUTING.md#translations).
+
 ## Quick start
 
 ### 1. Install the plugin

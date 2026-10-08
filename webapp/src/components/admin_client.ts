@@ -21,6 +21,16 @@ type TestEventResponse = {
   title: string;
 };
 
+export class AdminAPIError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    readonly params: Record<string, string> = {},
+  ) {
+    super(code);
+  }
+}
+
 export type WebhookTokenInput = {
   name: string;
   secret: string;
@@ -39,8 +49,33 @@ async function requestAdminJSON<T>(
     headers: { "X-Requested-With": "XMLHttpRequest", ...options.headers },
   });
   if (!response.ok) {
-    const message = (await response.text()).trim();
-    throw new Error(message || `HTTP ${response.status}`);
+    let code = "unknown";
+    const params: Record<string, string> = {};
+    const text = await response.text();
+    try {
+      const body: unknown = JSON.parse(text);
+      if (
+        body &&
+        typeof body === "object" &&
+        "code" in body &&
+        typeof body.code === "string"
+      ) {
+        code = body.code;
+        if (
+          "params" in body &&
+          body.params &&
+          typeof body.params === "object"
+        ) {
+          for (const [key, value] of Object.entries(body.params)) {
+            if (typeof value === "string") params[key] = value;
+          }
+        }
+      }
+    } catch (error) {
+      // Older servers may return plain-text errors; use the HTTP status.
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+    throw new AdminAPIError(response.status, code, params);
   }
   return (await response.json()) as T;
 }
@@ -49,17 +84,26 @@ export function fetchWebhookConfig(signal: AbortSignal) {
   return requestAdminJSON<WebhookConfigResponse>("webhook-config", { signal });
 }
 
-export function updateWebhookTokens(tokens: WebhookTokenInput[]) {
+export function updateWebhookTokens(
+  tokens: WebhookTokenInput[],
+  signal?: AbortSignal,
+) {
   return requestAdminJSON<WebhookConfigResponse>("webhook-tokens", {
     method: "PUT",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tokens }),
   });
 }
 
-export function createTimelineTestEvent(teamId: string, channelId: string) {
+export function createTimelineTestEvent(
+  teamId: string,
+  channelId: string,
+  signal?: AbortSignal,
+) {
   return requestAdminJSON<TestEventResponse>("test-event", {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       team_id: teamId,

@@ -2,7 +2,6 @@ import type { GlobalState } from "@mattermost/types/store";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import type { Dispatch } from "redux";
-
 import {
   addReaction,
   clearNewEventFlag,
@@ -13,6 +12,7 @@ import {
   removeReaction,
   SET_ERROR,
 } from "../actions";
+import { useMessages } from "../i18n";
 import {
   getCurrentChannelId,
   getCurrentTeamId,
@@ -20,6 +20,7 @@ import {
   getPluginState,
   getTimestampDisplayPreferences,
 } from "../selectors";
+import { errorKey } from "../timeline_errors";
 import type { TimelineUser } from "../types/timeline";
 import { useTimelineEventGroups } from "./timeline_event_groups";
 import TimelineEventList from "./timeline_event_list";
@@ -56,6 +57,7 @@ function usePrefersReducedMotion() {
 }
 
 const RHSView: React.FC = () => {
+  const { t } = useMessages();
   const dispatch = useDispatch<AppDispatch>();
   const listRef = useRef<HTMLDivElement>(null);
   const initialScrolledContextRef = useRef({ teamId: "", channelId: "" });
@@ -188,8 +190,7 @@ const RHSView: React.FC = () => {
 
   const handleReactionMutationFailure = useCallback(
     (error: unknown) => {
-      const message =
-        error instanceof Error ? error.message : "Failed to update reaction";
+      const message = errorKey(error, "error.reaction");
       console.error("Event Feed: failed to update reaction", error);
       dispatch({ type: SET_ERROR, error: message });
     },
@@ -227,7 +228,7 @@ const RHSView: React.FC = () => {
       className="event-feed-load-more"
       onClick={handleLoadMore}
     >
-      {"Load older events"}
+      {t("timeline.loadOlder")}
     </button>
   );
 

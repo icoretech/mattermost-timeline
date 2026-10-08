@@ -1,8 +1,9 @@
 import { SmilePlus, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useMessages } from "../i18n";
 import type { ReactionClientSummary, TimelineUser } from "../types/timeline";
 import ReactionPill from "./reaction_pill";
-import { REACTIONS } from "./reactions";
+import { REACTION_MESSAGE_KEYS, REACTIONS } from "./reactions";
 
 interface Props {
   reactions?: Record<string, ReactionClientSummary>;
@@ -19,6 +20,7 @@ export default function ReactionBar({
   onFetchUsers,
   getUser,
 }: Props) {
+  const { t } = useMessages();
   const [pickerOpen, setPickerOpen] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -63,21 +65,21 @@ export default function ReactionBar({
         type="button"
         className={`reaction-bar__toggle ${pickerOpen ? "reaction-bar__toggle--active" : ""}`}
         onClick={() => setPickerOpen(!pickerOpen)}
-        aria-label={pickerOpen ? "Close reaction picker" : "Add reaction"}
-        title={pickerOpen ? "Close" : "Add reaction"}
+        aria-label={t(pickerOpen ? "reaction.closePicker" : "reaction.add")}
+        title={t(pickerOpen ? "reaction.close" : "reaction.add")}
       >
         {pickerOpen ? <X size={14} /> : <SmilePlus size={14} />}
       </button>
       <div
         className={`reaction-bar__tray ${pickerOpen ? "reaction-bar__tray--open" : ""}`}
       >
-        {REACTIONS.map(({ icon, Icon, label }) => (
+        {REACTIONS.map(({ icon, Icon }) => (
           <button
             type="button"
             key={icon}
             className="reaction-bar__tray-btn"
-            aria-label={label}
-            title={label}
+            aria-label={t(REACTION_MESSAGE_KEYS[icon])}
+            title={t(REACTION_MESSAGE_KEYS[icon])}
             onClick={() => handlePickerSelect(icon)}
             tabIndex={pickerOpen ? 0 : -1}
           >

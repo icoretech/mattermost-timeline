@@ -310,15 +310,15 @@ export interface PluginRegistry {
       | [
           icon: ReactResolvable,
           action: () => void,
-          dropdownText: string,
-          tooltipText: string,
+          dropdownText: ReactResolvable,
+          tooltipText: ReactResolvable,
         ]
       | [
           {
             icon: ReactResolvable;
             action: () => void;
-            dropdownText: string;
-            tooltipText: string;
+            dropdownText: ReactResolvable;
+            tooltipText: ReactResolvable;
           },
         ]
   ): UniqueIdentifier;

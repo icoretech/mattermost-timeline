@@ -20,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import React, { useCallback } from "react";
+import { type MessageKey, useMessages } from "../i18n";
 import type { TimestampDisplayPreferences } from "../selectors";
 import type { EventEntry, EventLink, TimelineUser } from "../types/timeline";
 import { CustomFields } from "./custom_fields";
@@ -47,6 +48,25 @@ interface Props {
 }
 
 const ICON_SIZE = 18;
+const EVENT_TYPE_MESSAGES: Readonly<Record<string, MessageKey>> = {
+  host_online: "eventType.host_online",
+  host_offline: "eventType.host_offline",
+  deploy: "eventType.deploy",
+  alert: "eventType.alert",
+  error: "eventType.error",
+  info: "eventType.info",
+  success: "eventType.success",
+  money_in: "eventType.money_in",
+  money_out: "eventType.money_out",
+  security: "eventType.security",
+  incident: "eventType.incident",
+  user_joined: "eventType.user_joined",
+  user_left: "eventType.user_left",
+  scheduled: "eventType.scheduled",
+  review: "eventType.review",
+  message: "eventType.message",
+  generic: "eventType.generic",
+};
 
 const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   host_online: { icon: CircleCheck, color: "#2dc26b" },
@@ -68,28 +88,48 @@ const EVENT_TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string }> = {
   generic: { icon: MapPin, color: "#868e96" },
 };
 
-function timelineMetadataItems(event: EventEntry) {
-  const items: string[] = [];
+function timelineMetadataItems(
+  event: EventEntry,
+  t: ReturnType<typeof useMessages>["t"],
+) {
+  const items: { key: string; label: string }[] = [];
 
-  if (event.severity && event.severity !== "info") items.push(event.severity);
-  if (event.status && event.status !== "success") items.push(event.status);
-  if (event.environment) items.push(event.environment);
-  if (event.pinned) items.push("pinned");
-  if (isTimelineEventExpired(event)) items.push("expired");
-  if (event.resolved_at && event.status !== "resolved") items.push("resolved");
+  if (event.severity && event.severity !== "info")
+    items.push({ key: event.severity, label: t(`severity.${event.severity}`) });
+  if (event.status && event.status !== "success")
+    items.push({ key: event.status, label: t(`status.${event.status}`) });
+  if (event.environment)
+    items.push({ key: "environment", label: event.environment });
+  if (event.pinned) items.push({ key: "pinned", label: t("timeline.pinned") });
+  if (isTimelineEventExpired(event))
+    items.push({ key: "expired", label: t("timeline.expired") });
+  if (event.resolved_at && event.status !== "resolved")
+    items.push({ key: "resolved", label: t("status.resolved") });
 
   return items;
 }
 
-function timelineMetadataTitle(event: EventEntry) {
+function timelineMetadataTitle(
+  event: EventEntry,
+  t: ReturnType<typeof useMessages>["t"],
+) {
   const parts: string[] = [];
-  if (event.source) parts.push(`source: ${event.source}`);
-  if (event.severity) parts.push(`severity: ${event.severity}`);
-  if (event.status) parts.push(`status: ${event.status}`);
-  if (event.environment) parts.push(`environment: ${event.environment}`);
-  if (event.pinned) parts.push("pinned");
-  if (isTimelineEventExpired(event)) parts.push("expired");
-  if (event.resolved_at && event.status !== "resolved") parts.push("resolved");
+  if (event.source)
+    parts.push(t("timeline.sourceValue", { value: event.source }));
+  if (event.severity)
+    parts.push(
+      t("timeline.severityValue", { value: t(`severity.${event.severity}`) }),
+    );
+  if (event.status)
+    parts.push(
+      t("timeline.statusValue", { value: t(`status.${event.status}`) }),
+    );
+  if (event.environment)
+    parts.push(t("timeline.environmentValue", { value: event.environment }));
+  if (event.pinned) parts.push(t("timeline.pinned"));
+  if (isTimelineEventExpired(event)) parts.push(t("timeline.expired"));
+  if (event.resolved_at && event.status !== "resolved")
+    parts.push(t("status.resolved"));
   return parts.join(" · ");
 }
 
@@ -122,6 +162,7 @@ const TimelineEntry: React.FC<Props> = ({
   onFetchReactionUsers,
   getUser,
 }) => {
+  const { t } = useMessages();
   const config =
     EVENT_TYPE_CONFIG[event.event_type] || EVENT_TYPE_CONFIG.generic;
   const IconComponent = config.icon;
@@ -145,11 +186,14 @@ const TimelineEntry: React.FC<Props> = ({
         ? [{ url: event.link }]
         : [];
 
-  const metadataItems = timelineMetadataItems(event);
-  const metadataTitle = timelineMetadataTitle(event);
-  const eventTypeLabel = event.event_type.replace(/_/g, " ");
+  const metadataItems = timelineMetadataItems(event, t);
+  const metadataTitle = timelineMetadataTitle(event, t);
+  const eventTypeKey = EVENT_TYPE_MESSAGES[event.event_type];
+  const eventTypeLabel = eventTypeKey
+    ? t(eventTypeKey)
+    : event.event_type.replace(/_/g, " ");
   const eventTypeTitle = event.source
-    ? `${eventTypeLabel} · source: ${event.source}`
+    ? `${eventTypeLabel} · ${t("timeline.sourceValue", { value: event.source })}`
     : eventTypeLabel;
 
   return (
@@ -192,8 +236,11 @@ const TimelineEntry: React.FC<Props> = ({
         {metadataItems.length > 0 && (
           <div className="timeline-entry__meta" title={metadataTitle}>
             {metadataItems.map((item) => (
-              <span key={item} className={timelineMetadataClassName(item)}>
-                {item}
+              <span
+                key={item.key}
+                className={timelineMetadataClassName(item.key)}
+              >
+                {item.label}
               </span>
             ))}
           </div>
@@ -218,7 +265,7 @@ const TimelineEntry: React.FC<Props> = ({
                   title={l.label || l.url}
                 >
                   <ExternalLink size={13} strokeWidth={2} />
-                  <span>{l.label || "Link"}</span>
+                  <span>{l.label || t("timeline.link")}</span>
                 </a>
               ) : (
                 <span
@@ -227,7 +274,7 @@ const TimelineEntry: React.FC<Props> = ({
                   title={l.label || l.url}
                 >
                   <ExternalLink size={13} strokeWidth={2} />
-                  <span>{l.label || "Link"}</span>
+                  <span>{l.label || t("timeline.link")}</span>
                 </span>
               ),
             )}
