@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.1](https://github.com/icoretech/mattermost-timeline/compare/v2.1.0...v2.1.1) (2026-10-10)
+
+
+### Dependencies
+
+* update dependency @types/node to v26.6.5 ([#212](https://github.com/icoretech/mattermost-timeline/issues/212)) ([f9e5ac9](https://github.com/icoretech/mattermost-timeline/commit/f9e5ac9aa9818721724279a8cfc6fbc874706b75))
+* update dependency lucide-react to v1.54.0 ([#211](https://github.com/icoretech/mattermost-timeline/issues/211)) ([dae4ec5](https://github.com/icoretech/mattermost-timeline/commit/dae4ec5ba414a11f536094f69c1fb0c06b22358b))
+* update dependency lucide-react to v1.55.0 ([#213](https://github.com/icoretech/mattermost-timeline/issues/213)) ([cc091bb](https://github.com/icoretech/mattermost-timeline/commit/cc091bbae40bfcd059432477a235e42279759c2e))
+* update dependency vite to v8.3.4 ([#208](https://github.com/icoretech/mattermost-timeline/issues/208)) ([f025974](https://github.com/icoretech/mattermost-timeline/commit/f025974a45f603cbcf288bed9957e6a023135d7a))
+* update go module directive to v1.27.2 ([#210](https://github.com/icoretech/mattermost-timeline/issues/210)) ([80aab0c](https://github.com/icoretech/mattermost-timeline/commit/80aab0c279699fa4224b021967350fb83728a8b7))
+
 ## [2.1.0](https://github.com/icoretech/mattermost-timeline/compare/v2.0.2...v2.1.0) (2026-10-08)
 
 
