@@ -27,7 +27,7 @@
     "@vitejs/plugin-react": "6.1.2",
     "jsdom": "30.1.2",
     "react": "19.3.0",
-    "react-doctor": "0.9.17",
+    "react-doctor": "0.9.18",
     "react-dom": "19.3.0",
     "react-intl": "12.1.4",
     "react-redux": "9.3.0",
