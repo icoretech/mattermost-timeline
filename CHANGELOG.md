@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.1.1](https://github.com/icoretech/mattermost-timeline/compare/v2.1.0...v2.1.1) (2026-10-13)
+
+
+### Dependencies
+
+* update dependency @types/node to v26.6.5 ([#212](https://github.com/icoretech/mattermost-timeline/issues/212)) ([f9e5ac9](https://github.com/icoretech/mattermost-timeline/commit/f9e5ac9aa9818721724279a8cfc6fbc874706b75))
+* update dependency lucide-react to v1.54.0 ([#211](https://github.com/icoretech/mattermost-timeline/issues/211)) ([dae4ec5](https://github.com/icoretech/mattermost-timeline/commit/dae4ec5ba414a11f536094f69c1fb0c06b22358b))
+* update dependency lucide-react to v1.55.0 ([#213](https://github.com/icoretech/mattermost-timeline/issues/213)) ([cc091bb](https://github.com/icoretech/mattermost-timeline/commit/cc091bbae40bfcd059432477a235e42279759c2e))
+* update dependency react-doctor to v0.9.18 ([#215](https://github.com/icoretech/mattermost-timeline/issues/215)) ([1a940b6](https://github.com/icoretech/mattermost-timeline/commit/1a940b684682a4cd196f1a2d9598b3cfdc0968ff))
+* update dependency vite to v8.3.4 ([#208](https://github.com/icoretech/mattermost-timeline/issues/208)) ([f025974](https://github.com/icoretech/mattermost-timeline/commit/f025974a45f603cbcf288bed9957e6a023135d7a))
+* update dependency vitest to v5.0.4 ([#214](https://github.com/icoretech/mattermost-timeline/issues/214)) ([dce52c9](https://github.com/icoretech/mattermost-timeline/commit/dce52c95235d9acac84fdcbcc9fb6c05f38332d2))
+* update go module directive to v1.27.2 ([#210](https://github.com/icoretech/mattermost-timeline/issues/210)) ([80aab0c](https://github.com/icoretech/mattermost-timeline/commit/80aab0c279699fa4224b021967350fb83728a8b7))
+* update Go modules and webapp dependency lockfile ([8e85ce4](https://github.com/icoretech/mattermost-timeline/commit/8e85ce4bb77e0205eb5cd505872a430190aeacd6))
+* update module github.com/mattermost/mattermost/server/public to v0.5.0 ([#216](https://github.com/icoretech/mattermost-timeline/issues/216)) ([873cdce](https://github.com/icoretech/mattermost-timeline/commit/873cdce4669cf463467435fcf45572e76aca25c8))
+
 ## [2.1.0](https://github.com/icoretech/mattermost-timeline/compare/v2.0.2...v2.1.0) (2026-10-08)
 
 
