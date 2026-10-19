@@ -32,6 +32,16 @@ const manifest = JSON.parse(
         "footer": "",
         "settings": [
             {
+                "key": "ProjectLinks",
+                "display_name": "Project links",
+                "type": "custom",
+                "help_text": "",
+                "placeholder": "",
+                "default": "",
+                "hosting": "",
+                "secret": false
+            },
+            {
                 "key": "WebhookTokens",
                 "display_name": "Webhook Tokens",
                 "type": "custom",

@@ -5,6 +5,7 @@ import {
   LocalizedSetting,
   type LocalizedSettingProps,
 } from "./localized_settings";
+import { ProjectLinks } from "./project_links";
 
 const settings = [
   "RequireSignedWebhooks",
@@ -18,6 +19,9 @@ const settings = [
 export function registerLocalizedAdminSettings(
   registry: Pick<PluginRegistry, "registerAdminConsoleCustomSetting">,
 ) {
+  registry.registerAdminConsoleCustomSetting("ProjectLinks", ProjectLinks, {
+    showTitle: false,
+  });
   registry.registerAdminConsoleCustomSetting(
     "WebhookTokens",
     WebhookTokensSetting,

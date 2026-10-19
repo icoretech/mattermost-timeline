@@ -25,6 +25,13 @@
         "footer": "",
         "settings": [
             {
+                "key": "ProjectLinks",
+                "display_name": "Project links",
+                "type": "custom",
+                "help_text": "",
+                "default": ""
+            },
+            {
                 "key": "WebhookTokens",
                 "display_name": "Webhook Tokens",
                 "type": "custom",

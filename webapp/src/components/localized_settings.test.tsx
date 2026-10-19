@@ -16,6 +16,7 @@ it("keeps server configuration defaults and secret flags in the custom manifest 
       ({ key, type, default: value }) => ({ key, type, value }),
     ),
   ).toEqual([
+    { key: "ProjectLinks", type: "custom", value: "" },
     { key: "WebhookTokens", type: "custom", value: "[]" },
     { key: "RequireSignedWebhooks", type: "custom", value: false },
     { key: "WebhookSecret", type: "custom", value: "" },
@@ -32,7 +33,7 @@ it("keeps server configuration defaults and secret flags in the custom manifest 
   ).toEqual(["WebhookTokens", "WebhookSecret"]);
 });
 
-it("registers all eight settings with component-owned translated titles", () => {
+it("registers project links and all eight localized settings with component-owned titles", () => {
   const registerAdminConsoleCustomSetting = vi.fn();
   registerLocalizedAdminSettings({ registerAdminConsoleCustomSetting });
   expect(
@@ -41,6 +42,7 @@ it("registers all eight settings with component-owned translated titles", () => 
     "EnableReactions",
     "MaxEventsDisplayed",
     "MaxEventsStored",
+    "ProjectLinks",
     "RequireSignedWebhooks",
     "TimelineOrder",
     "WebhookSecret",

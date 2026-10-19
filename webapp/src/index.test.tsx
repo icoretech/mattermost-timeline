@@ -110,6 +110,13 @@ describe("plugin entrypoint", () => {
 
     plugin.initialize(registry, store);
 
+    const { ProjectLinks } = await import("./components/project_links");
+    expect(registry.registerAdminConsoleCustomSetting).toHaveBeenCalledWith(
+      "ProjectLinks",
+      ProjectLinks,
+      { showTitle: false },
+    );
+
     const translationsForLocale =
       registry.registerTranslations.mock.calls[0]?.[0];
     expect(typeof translationsForLocale).toBe("function");
