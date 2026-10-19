@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.2](https://github.com/icoretech/mattermost-timeline/compare/v2.1.1...v2.1.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* render project links in Mattermost 12 settings ([bcf3059](https://github.com/icoretech/mattermost-timeline/commit/bcf3059e559bb9a5162a9b5225a9edfa23339f60))
+
+
+### Dependencies
+
+* update dependency jsdom to v30.1.3 ([#221](https://github.com/icoretech/mattermost-timeline/issues/221)) ([5966d5a](https://github.com/icoretech/mattermost-timeline/commit/5966d5a038198031ebf5a9809edc9b70d73f5ccd))
+* update dependency lucide-react to v1.57.0 ([#217](https://github.com/icoretech/mattermost-timeline/issues/217)) ([b6588ba](https://github.com/icoretech/mattermost-timeline/commit/b6588ba2b7f5aaf225618fa19fd4ac2c9d801297))
+* update dependency lucide-react to v1.58.0 ([#224](https://github.com/icoretech/mattermost-timeline/issues/224)) ([c459fd1](https://github.com/icoretech/mattermost-timeline/commit/c459fd15eb46b92afb869d4135da160f5d27c92c))
+* update dependency lucide-react to v1.59.0 ([#225](https://github.com/icoretech/mattermost-timeline/issues/225)) ([53f5f04](https://github.com/icoretech/mattermost-timeline/commit/53f5f04c240aaf2f3aac199c6f35a5e0eb9882b7))
+* update dependency node to v24.22.0 ([#220](https://github.com/icoretech/mattermost-timeline/issues/220)) ([81ca816](https://github.com/icoretech/mattermost-timeline/commit/81ca8162ad9e2d309596e76c32adb29050462274))
+* update dependency sass-embedded to v1.105.2 ([#223](https://github.com/icoretech/mattermost-timeline/issues/223)) ([7d18a49](https://github.com/icoretech/mattermost-timeline/commit/7d18a49dc8cc87f204e0a0da4c7b9095d23b4671))
+* update dependency vitest to v5.0.5 ([#222](https://github.com/icoretech/mattermost-timeline/issues/222)) ([e4329b3](https://github.com/icoretech/mattermost-timeline/commit/e4329b3bbeae18119b70a08c0dbd6df8709dc430))
+* update react-ecosystem to v19.3.1 ([#219](https://github.com/icoretech/mattermost-timeline/issues/219)) ([4f3234e](https://github.com/icoretech/mattermost-timeline/commit/4f3234e79dd58e4a4c3fa16599014a1cbc39b89d))
+
 ## [2.1.1](https://github.com/icoretech/mattermost-timeline/compare/v2.1.0...v2.1.1) (2026-10-13)
 
 
