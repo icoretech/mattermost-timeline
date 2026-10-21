@@ -61,6 +61,15 @@ function argumentSignature(message: string): string[] {
   return [...signature].sort();
 }
 
+function FallbackMessage() {
+  const { t } = useMessages();
+  return React.createElement(
+    "span",
+    null,
+    t("reaction.count", { label: "Acknowledged", count: 1 }),
+  );
+}
+
 describe("translation catalog contracts", () => {
   it.each(Object.entries(catalogs))(
     "%s has exactly the canonical English keys and valid ICU arguments",
@@ -138,14 +147,6 @@ describe("translation catalog contracts", () => {
   );
 
   it("keeps English plural grammar for an unsupported host locale", () => {
-    function FallbackMessage() {
-      const { t } = useMessages();
-      return React.createElement(
-        "span",
-        null,
-        t("reaction.count", { label: "Acknowledged", count: 1 }),
-      );
-    }
     const rendered = renderToStaticMarkup(
       withIntl(React.createElement(FallbackMessage), "ja"),
     );

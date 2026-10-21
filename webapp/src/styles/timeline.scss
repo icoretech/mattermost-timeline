@@ -180,7 +180,7 @@
     margin-top: 2px;
   }
 
-  &:last-child &__connector {
+  &:last-child .timeline-entry__connector {
     display: none;
   }
 
@@ -671,15 +671,6 @@
     font-weight: 600;
   }
 
-  fieldset label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-right: 16px;
-    margin-bottom: 0;
-    font-weight: 400;
-  }
-
   input:not([type="radio"]),
   select {
     box-sizing: border-box;
@@ -711,11 +702,26 @@
 
 .timeline-token-settings,
 .timeline-admin-settings {
-  --timeline-settings-border: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.16);
-  --timeline-settings-border-strong: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.24);
-  --timeline-settings-muted: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.76);
-  --timeline-settings-surface: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.04);
-  --timeline-settings-surface-strong: rgba(var(--center-channel-color-rgb, 63, 67, 80), 0.07);
+  --timeline-settings-border: rgba(
+    var(--center-channel-color-rgb, 63, 67, 80),
+    0.16
+  );
+  --timeline-settings-border-strong: rgba(
+    var(--center-channel-color-rgb, 63, 67, 80),
+    0.24
+  );
+  --timeline-settings-muted: rgba(
+    var(--center-channel-color-rgb, 63, 67, 80),
+    0.76
+  );
+  --timeline-settings-surface: rgba(
+    var(--center-channel-color-rgb, 63, 67, 80),
+    0.04
+  );
+  --timeline-settings-surface-strong: rgba(
+    var(--center-channel-color-rgb, 63, 67, 80),
+    0.07
+  );
 
   width: min(100%, 620px);
   max-width: 620px;
@@ -1083,6 +1089,15 @@
     background: rgba(var(--error-text-color-rgb, 210, 75, 78), 0.1);
     color: rgba(var(--error-text-color-rgb, 210, 75, 78), 1);
   }
+}
+
+.timeline-localized-setting fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 16px;
+  margin-bottom: 0;
+  font-weight: 400;
 }
 
 @media (max-width: 640px) {
