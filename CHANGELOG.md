@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.4](https://github.com/icoretech/mattermost-timeline/compare/v2.1.3...v2.1.4) (2026-10-21)
+
+
+### Dependencies
+
+* update Biome, Go modules, and build tooling ([f795b18](https://github.com/icoretech/mattermost-timeline/commit/f795b18d99124b2845db2c3d0e35f78ed03fe945))
+* update dependency lucide-react to v1.61.0 ([#234](https://github.com/icoretech/mattermost-timeline/issues/234)) ([0c8827b](https://github.com/icoretech/mattermost-timeline/commit/0c8827bff91888bc5ef9a01ed3c33fb555cdf1c4))
+* update dependency sass-embedded to v1.106.0 ([#230](https://github.com/icoretech/mattermost-timeline/issues/230)) ([c9b8429](https://github.com/icoretech/mattermost-timeline/commit/c9b8429ae9e28b492c312cb456acdac56c6a8a2b))
+* update dependency vite to v8.3.5 ([#232](https://github.com/icoretech/mattermost-timeline/issues/232)) ([b76571a](https://github.com/icoretech/mattermost-timeline/commit/b76571acb3ccb690c23310d3dee850d375dd370a))
+
 ## [2.1.3](https://github.com/icoretech/mattermost-timeline/compare/v2.1.2...v2.1.3) (2026-10-21)
 
 
