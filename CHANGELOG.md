@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.3](https://github.com/icoretech/mattermost-timeline/compare/v2.1.2...v2.1.3) (2026-10-21)
+
+
+### Dependencies
+
+* update dependency lucide-react to v1.60.0 ([#228](https://github.com/icoretech/mattermost-timeline/issues/228)) ([21074d3](https://github.com/icoretech/mattermost-timeline/commit/21074d366b480d4685377d8d402ebb096eb1eb72))
+* update formatjs monorepo ([#226](https://github.com/icoretech/mattermost-timeline/issues/226)) ([922a708](https://github.com/icoretech/mattermost-timeline/commit/922a708f289e7ee1dbf32b11a563d988d2137105))
+* update go module directive to v1.27.3 ([#227](https://github.com/icoretech/mattermost-timeline/issues/227)) ([8e67daf](https://github.com/icoretech/mattermost-timeline/commit/8e67daf8e554d0453f46f8d54028cdf35c2628c7))
+
 ## [2.1.2](https://github.com/icoretech/mattermost-timeline/compare/v2.1.1...v2.1.2) (2026-10-19)
 
 
