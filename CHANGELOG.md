@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.5](https://github.com/icoretech/mattermost-timeline/compare/v2.1.4...v2.1.5) (2026-10-22)
+
+
+### Dependencies
+
+* update dependency sass-embedded to v1.106.1 ([#235](https://github.com/icoretech/mattermost-timeline/issues/235)) ([ecec6a9](https://github.com/icoretech/mattermost-timeline/commit/ecec6a9363876c9a55694b819f71ae1619c4b657))
+
 ## [2.1.4](https://github.com/icoretech/mattermost-timeline/compare/v2.1.3...v2.1.4) (2026-10-21)
 
 
