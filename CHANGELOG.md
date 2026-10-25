@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.5](https://github.com/icoretech/mattermost-timeline/compare/v2.1.4...v2.1.5) (2026-10-25)
+
+
+### Dependencies
+
+* refresh compatible webapp transitive dependencies ([43d2cc4](https://github.com/icoretech/mattermost-timeline/commit/43d2cc42213730f9187215b6177d9420cd0e61d0))
+* update dependency @biomejs/biome to v2.6.3 ([#233](https://github.com/icoretech/mattermost-timeline/issues/233)) ([de3a4d0](https://github.com/icoretech/mattermost-timeline/commit/de3a4d03711f9fc98b0a962c8f38d170b3b2a652))
+* update dependency sass-embedded to v1.106.1 ([#235](https://github.com/icoretech/mattermost-timeline/issues/235)) ([ecec6a9](https://github.com/icoretech/mattermost-timeline/commit/ecec6a9363876c9a55694b819f71ae1619c4b657))
+* update module github.com/mattermost/mattermost/server/public to v0.6.0 ([#237](https://github.com/icoretech/mattermost-timeline/issues/237)) ([b23d1c5](https://github.com/icoretech/mattermost-timeline/commit/b23d1c5c8918bbdd3b137a01b816b256d096d993))
+
 ## [2.1.4](https://github.com/icoretech/mattermost-timeline/compare/v2.1.3...v2.1.4) (2026-10-21)
 
 
