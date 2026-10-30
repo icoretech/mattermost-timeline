@@ -1342,6 +1342,43 @@ func TestHandleWebhookBatch_ObjectPayloadContinuesAfterInvalidItem(t *testing.T)
 	api.AssertExpectations(t)
 }
 
+func TestHandleWebhookBatch_ExternalID_ReplaceLinks(t *testing.T) {
+	api := &plugintest.API{}
+	p := newTestPlugin(t, api, &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"})
+	const teamID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	existing := Event{
+		ID:         "evt-existing",
+		TeamID:     teamID,
+		Title:      "work item",
+		ExternalID: "gitlab-work-item-123",
+		Links:      []EventLink{{URL: "https://gitlab.example.com/group/project/-/work_items/123"}},
+	}
+	existingJSON, err := json.Marshal(existing)
+	require.NoError(t, err)
+	api.On("KVGet", "ext_id:"+teamID+":gitlab-work-item-123").Return([]byte(existing.ID), (*model.AppError)(nil))
+	api.On("KVGet", "event:"+existing.ID).Return(existingJSON, (*model.AppError)(nil))
+	api.On("KVSet", "event:"+existing.ID, mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+	api.On("KVGet", "event_index:"+teamID).Return([]byte(`["evt-existing"]`), (*model.AppError)(nil))
+	api.On("KVCompareAndSet", "event_index:"+teamID, mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+	api.On("PublishWebSocketEvent", "updated_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast")).Return()
+
+	body := `{"events":[{"title":"incident","team_id":"` + teamID + `","external_id":"gitlab-work-item-123","replace_links":true,"links":[]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook/batch", strings.NewReader(body))
+	req.Header.Set("X-Webhook-Secret", "s3cret")
+	rec := httptest.NewRecorder()
+	p.router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var response BatchWebhookResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response.Results, 1)
+	assert.Equal(t, http.StatusOK, response.Results[0].Status)
+	require.NotNil(t, response.Results[0].Event)
+	assert.Equal(t, existing.ID, response.Results[0].Event.ID)
+	assert.Empty(t, response.Results[0].Event.Links)
+	api.AssertExpectations(t)
+}
+
 func TestHandleWebhook_RejectsOversizedBody(t *testing.T) {
 	api := &plugintest.API{}
 	cfg := &configuration{
@@ -1633,6 +1670,82 @@ func TestHandleWebhook_ExternalID_UpdateExisting(t *testing.T) {
 	assert.NotContains(t, websocketEvent, "reactions")
 	assert.Contains(t, websocketEvent, "client_reactions")
 	api.AssertExpectations(t)
+}
+
+func TestHandleWebhook_ExternalID_ReplaceLinks(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		replaceLinks string
+		links        string
+		wantLinks    []string
+	}{
+		{
+			name:         "explicit replacement",
+			replaceLinks: `,"replace_links":true`,
+			links:        `[{"url":"https://ci.com/2","label":"Incident"}]`,
+			wantLinks:    []string{"https://ci.com/2"},
+		},
+		{
+			name:         "explicit clear",
+			replaceLinks: `,"replace_links":true`,
+			links:        `[]`,
+			wantLinks:    []string{},
+		},
+		{
+			name:         "false preserves merge behavior",
+			replaceLinks: `,"replace_links":false`,
+			links:        `[{"url":"https://ci.com/2","label":"Incident"}]`,
+			wantLinks:    []string{"https://ci.com/1", "https://ci.com/2"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			api := &plugintest.API{}
+			p := newTestPlugin(t, api, &configuration{WebhookSecret: "s3cret", MaxEventsStored: "100"})
+			const teamID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+			existingEvent := Event{
+				ID:         "evt-existing",
+				TeamID:     teamID,
+				Title:      "work item",
+				EventType:  "incident",
+				ExternalID: "gitlab-work-item-123",
+				Link:       "https://gitlab.example.com/group/project/-/work_items/123",
+				Links:      []EventLink{{URL: "https://ci.com/1", Label: "Work item"}},
+			}
+			existingJSON, err := json.Marshal(existingEvent)
+			require.NoError(t, err)
+
+			api.On("KVGet", "ext_id:"+teamID+":gitlab-work-item-123").Return([]byte(existingEvent.ID), (*model.AppError)(nil))
+			api.On("KVGet", "event:"+existingEvent.ID).Return(existingJSON, (*model.AppError)(nil))
+			api.On("KVSet", "event:"+existingEvent.ID, mock.AnythingOfType("[]uint8")).Return((*model.AppError)(nil))
+			api.On("KVGet", "event_index:"+teamID).Return([]byte(`["evt-existing"]`), (*model.AppError)(nil))
+			api.On("KVCompareAndSet", "event_index:"+teamID, mock.Anything, mock.AnythingOfType("[]uint8")).Return(true, (*model.AppError)(nil))
+			api.On("PublishWebSocketEvent", "updated_event", mock.Anything, mock.AnythingOfType("*model.WebsocketBroadcast")).Return()
+
+			payload := `{"title":"incident","team_id":"` + teamID + `","external_id":"gitlab-work-item-123"` + tt.replaceLinks + `,"links":` + tt.links + `}`
+			req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(payload))
+			req.Header.Set("X-Webhook-Secret", "s3cret")
+			rec := httptest.NewRecorder()
+			p.router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			var updated ClientEvent
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &updated))
+			assert.Equal(t, existingEvent.ID, updated.ID)
+			assert.Equal(t, tt.wantLinks, eventLinkURLs(updated.Links))
+			if tt.name != "false preserves merge behavior" {
+				assert.Empty(t, updated.Link, "replacement must clear legacy single-link storage")
+			}
+			api.AssertExpectations(t)
+		})
+	}
+}
+
+func eventLinkURLs(links []EventLink) []string {
+	urls := make([]string, len(links))
+	for i, link := range links {
+		urls[i] = link.URL
+	}
+	return urls
 }
 
 func TestHandleWebhook_ExternalID_StatusUpdate(t *testing.T) {

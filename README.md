@@ -149,7 +149,7 @@ Use `external_id` when an external system has a stable event ID. A later webhook
 }
 ```
 
-Existing links are preserved and new links are added once per URL. Omitted operational metadata is retained; explicit `false` or `0` values clear pinning and timestamps. Sending `status: ""` clears the status; omitting `status` retains its existing value. Setting `status` to `resolved` records `resolved_at` automatically unless a timestamp is supplied. Setting `status` to `closed` marks the same event closed without implying resolution or automatically recording `resolved_at`; existing resolution metadata is retained unless explicitly cleared with `resolved_at: 0`. Reuse the same `external_id` to update the event instead of creating another timeline item. A scoped token can only update an existing event when its current channels also fall within the token's permissions.
+Existing links are preserved and new links are added once per URL. Set `replace_links: true` when an update must replace the complete link list; sending it with `links: []` clears all links. Omit it, or set it to `false`, to preserve the existing merge behavior. Omitted operational metadata is retained; explicit `false` or `0` values clear pinning and timestamps. Sending `status: ""` clears the status; omitting `status` retains its existing value. Setting `status` to `resolved` records `resolved_at` automatically unless a timestamp is supplied. Setting `status` to `closed` marks the same event closed without implying resolution or automatically recording `resolved_at`; existing resolution metadata is retained unless explicitly cleared with `resolved_at: 0`. Reuse the same `external_id` to update the event instead of creating another timeline item. A scoped token can only update an existing event when its current channels also fall within the token's permissions.
 
 ## How it works
 
@@ -202,6 +202,7 @@ X-Timeline-Signature: sha256=<hex-hmac>
 | `event_type`  | string  | no       | Icon/category hint; defaults to `generic`                                 |
 | `source`      | string  | no       | Short source label, such as `ci/cd`, `alertmanager`, or `stripe`          |
 | `external_id` | string  | no       | Idempotency key for updating an existing event                            |
+| `replace_links` | boolean | no       | On an `external_id` update, replace all links; use `links: []` to clear them |
 | `custom_fields` | array | no       | Ordered integration-specific fields; see [Custom fields](#custom-fields) |
 | `links`       | array   | no       | Labeled links: `{ "label": "Dashboard", "url": "https://..." }`     |
 | `link`        | string  | no       | Legacy single-link field; prefer `links`                                  |

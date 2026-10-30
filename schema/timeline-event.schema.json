@@ -32,6 +32,10 @@
       "maxLength": 200,
       "description": "Idempotency key used to update an existing event"
     },
+    "replace_links": {
+      "type": "boolean",
+      "description": "When true on an external_id update, replace the complete link list; an empty links array clears existing links"
+    },
     "links": {
       "type": "array",
       "maxItems": 10,

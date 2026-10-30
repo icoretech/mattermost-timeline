@@ -100,6 +100,7 @@ type WebhookPayload struct {
 	Source       string        `json:"source,omitempty"`
 	TeamID       string        `json:"team_id,omitempty"`
 	ExternalID   string        `json:"external_id,omitempty"`
+	ReplaceLinks *bool         `json:"replace_links,omitempty"`
 	Channels     []string      `json:"channels,omitempty"`
 	Severity     *string       `json:"severity,omitempty"`
 	Status       *string       `json:"status,omitempty"`

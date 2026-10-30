@@ -404,7 +404,12 @@ func applyWebhookUpdate(existing *Event, payload WebhookPayload, eventType strin
 	existing.EventType = eventType
 	existing.Source = payload.Source
 	existing.Timestamp = now
-	existing.Links = mergeLinks(existing.Links, incomingLinks)
+	if payload.ReplaceLinks != nil && *payload.ReplaceLinks {
+		existing.Link = ""
+		existing.Links = append([]EventLink(nil), incomingLinks...)
+	} else {
+		existing.Links = mergeLinks(existing.Links, incomingLinks)
+	}
 	existing.Channels = payload.Channels
 	applyWebhookMetadata(existing, payload, now)
 	return oldChannels
