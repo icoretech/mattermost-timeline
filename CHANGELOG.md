@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.2.0](https://github.com/icoretech/mattermost-timeline/compare/v2.1.5...v2.2.0) (2026-10-30)
+
+
+### Bug Fixes
+
+* allow opt-in webhook link replacement ([7cdb734](https://github.com/icoretech/mattermost-timeline/commit/7cdb734d2040f23e41c340200beb37ecda8ed231))
+
+
+### Dependencies
+
+* update dependency @biomejs/biome to v2.6.4 ([#245](https://github.com/icoretech/mattermost-timeline/issues/245)) ([dbf24f4](https://github.com/icoretech/mattermost-timeline/commit/dbf24f4610abffe60b6ed653950b58de7d6807fb))
+* update dependency lucide-react to v1.62.0 ([#239](https://github.com/icoretech/mattermost-timeline/issues/239)) ([1e5bfb4](https://github.com/icoretech/mattermost-timeline/commit/1e5bfb4b8837037812f77cf63b2f5ff67130890c))
+* update dependency lucide-react to v1.63.0 ([#244](https://github.com/icoretech/mattermost-timeline/issues/244)) ([80a0917](https://github.com/icoretech/mattermost-timeline/commit/80a0917eafa81a763d3f166999b0075d642a6b3d))
+* update dependency lucide-react to v1.64.0 ([#248](https://github.com/icoretech/mattermost-timeline/issues/248)) ([1c91451](https://github.com/icoretech/mattermost-timeline/commit/1c91451c1c5b3a978bc1ce6e452fa82bb4d457e1))
+* update dependency lucide-react to v1.65.0 ([#250](https://github.com/icoretech/mattermost-timeline/issues/250)) ([babd06a](https://github.com/icoretech/mattermost-timeline/commit/babd06afb396ba3296057e993a937f52269f40a0))
+* update dependency node to v24.22.2 ([#247](https://github.com/icoretech/mattermost-timeline/issues/247)) ([6ac9dba](https://github.com/icoretech/mattermost-timeline/commit/6ac9dba79e06a71d03710948888d63bc312c2d02))
+* update dependency react-intl to v12.1.6 ([#241](https://github.com/icoretech/mattermost-timeline/issues/241)) ([0384fcb](https://github.com/icoretech/mattermost-timeline/commit/0384fcb20428fb8b9a95cad475726a130416f25e))
+* update dependency react-redux to v9.3.1 ([#242](https://github.com/icoretech/mattermost-timeline/issues/242)) ([06a9b98](https://github.com/icoretech/mattermost-timeline/commit/06a9b988342f4f585dadc4aa853a75f7d618314d))
+* update dependency sass-embedded to v1.107.0 ([#246](https://github.com/icoretech/mattermost-timeline/issues/246)) ([96cca32](https://github.com/icoretech/mattermost-timeline/commit/96cca32fe1772d84251bcea911320bd9565fa4d2))
+* update dependency vite-plugin-css-injected-by-js to v5.0.3 ([#238](https://github.com/icoretech/mattermost-timeline/issues/238)) ([00b5041](https://github.com/icoretech/mattermost-timeline/commit/00b5041d08666274bfc35795d53b3dc97045ac60))
+
+
+### Miscellaneous Chores
+
+* release 2.2.0 ([bb2ab15](https://github.com/icoretech/mattermost-timeline/commit/bb2ab1520f5f87d4e11e44138e483c05856bce86))
+
 ## [2.1.5](https://github.com/icoretech/mattermost-timeline/compare/v2.1.4...v2.1.5) (2026-10-25)
 
 
