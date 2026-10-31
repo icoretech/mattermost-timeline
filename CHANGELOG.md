@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.1](https://github.com/icoretech/mattermost-timeline/compare/v2.2.0...v2.2.1) (2026-10-31)
+
+
+### Dependencies
+
+* update dependency lucide-react to v1.66.0 ([#253](https://github.com/icoretech/mattermost-timeline/issues/253)) ([002295e](https://github.com/icoretech/mattermost-timeline/commit/002295ede739922bd50360f5c701c5d691ece0a8))
+* update dependency sass-embedded to v1.107.1 ([#251](https://github.com/icoretech/mattermost-timeline/issues/251)) ([9d52af0](https://github.com/icoretech/mattermost-timeline/commit/9d52af058440f65073f1b37f1ab693ea9d28cfb8))
+
 ## [2.2.0](https://github.com/icoretech/mattermost-timeline/compare/v2.1.5...v2.2.0) (2026-10-30)
 
 
