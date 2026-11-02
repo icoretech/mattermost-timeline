@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.1](https://github.com/icoretech/mattermost-timeline/compare/v2.2.0...v2.2.1) (2026-11-02)
+
+
+### Dependencies
+
+* update dependency lucide-react to v1.66.0 ([#253](https://github.com/icoretech/mattermost-timeline/issues/253)) ([002295e](https://github.com/icoretech/mattermost-timeline/commit/002295ede739922bd50360f5c701c5d691ece0a8))
+* update dependency react-doctor to v0.9.21 ([#254](https://github.com/icoretech/mattermost-timeline/issues/254)) ([316c0f6](https://github.com/icoretech/mattermost-timeline/commit/316c0f642b883f36b64e39916a2822750df52718))
+* update dependency react-doctor to v0.9.22 ([#255](https://github.com/icoretech/mattermost-timeline/issues/255)) ([410ad4f](https://github.com/icoretech/mattermost-timeline/commit/410ad4fd2688f280a554fb5638929292f5000c44))
+* update dependency sass-embedded to v1.107.1 ([#251](https://github.com/icoretech/mattermost-timeline/issues/251)) ([9d52af0](https://github.com/icoretech/mattermost-timeline/commit/9d52af058440f65073f1b37f1ab693ea9d28cfb8))
+* update gRPC and Mattermost logging modules ([2e7576e](https://github.com/icoretech/mattermost-timeline/commit/2e7576eeb3bdafe772700cc621340a7b468b5dde))
+* update Vite tooling and constrain TypeScript ([d150d56](https://github.com/icoretech/mattermost-timeline/commit/d150d567dd0b81e74ee2d33efa8425ff31b556ce))
+* update workflow Node.js to 26.13.0 ([0152d44](https://github.com/icoretech/mattermost-timeline/commit/0152d44b5d7bf480c4a0fa9dce688191eefcc6a7))
+
 ## [2.2.0](https://github.com/icoretech/mattermost-timeline/compare/v2.1.5...v2.2.0) (2026-10-30)
 
 
