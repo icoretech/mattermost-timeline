@@ -351,7 +351,9 @@
     color: rgba(var(--button-bg-rgb, 28, 88, 217), 1);
     background: rgba(var(--button-bg-rgb, 28, 88, 217), 0.08);
     text-decoration: none;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
 
     &:hover {
       background: rgba(var(--button-bg-rgb, 28, 88, 217), 0.16);
@@ -424,7 +426,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 
   &:hover {
     background-color: rgba(var(--button-bg-rgb, 28, 88, 217), 0.08);
@@ -530,7 +534,9 @@
     overflow: hidden;
     max-width: 0;
     opacity: 0;
-    transition: max-width 0.25s ease, opacity 0.2s ease;
+    transition:
+      max-width 0.25s ease,
+      opacity 0.2s ease;
 
     &--open {
       max-width: 280px;
