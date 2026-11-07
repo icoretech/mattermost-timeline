@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.2](https://github.com/icoretech/mattermost-timeline/compare/v2.2.1...v2.2.2) (2026-11-07)
+
+
+### Dependencies
+
+* update Biome to 2.6.5 and format styles ([c9c529f](https://github.com/icoretech/mattermost-timeline/commit/c9c529fd4d1490634d8da46531fe4b266243b060))
+* update dependency @biomejs/biome to v2.6.6 ([#260](https://github.com/icoretech/mattermost-timeline/issues/260)) ([2aa2efe](https://github.com/icoretech/mattermost-timeline/commit/2aa2efef89b6a83c1143588ce53bd391402e53f7))
+* update dependency lucide-react to v1.67.0 ([#257](https://github.com/icoretech/mattermost-timeline/issues/257)) ([2fb3e2c](https://github.com/icoretech/mattermost-timeline/commit/2fb3e2cd90dc78305deecc4ea8d108f930b5f0c8))
+* update dependency lucide-react to v1.68.0 ([#259](https://github.com/icoretech/mattermost-timeline/issues/259)) ([56ed4a1](https://github.com/icoretech/mattermost-timeline/commit/56ed4a1dbbd28ed091444caea0e500481648ba87))
+* update dependency lucide-react to v1.69.0 ([#261](https://github.com/icoretech/mattermost-timeline/issues/261)) ([7a4aa5c](https://github.com/icoretech/mattermost-timeline/commit/7a4aa5c33d480fd7d702a884fdfbbbc7cc192347))
+* update dependency lucide-react to v1.70.0 ([#264](https://github.com/icoretech/mattermost-timeline/issues/264)) ([987712a](https://github.com/icoretech/mattermost-timeline/commit/987712a19e51c5798b5ed05e6edd0b86e37ce593))
+* update dependency sass-embedded to v1.108.0 ([#263](https://github.com/icoretech/mattermost-timeline/issues/263)) ([c7c85db](https://github.com/icoretech/mattermost-timeline/commit/c7c85db2196e04e029e225e71a9c051a50b892c8))
+* update dependency sass-embedded to v1.108.1 ([#265](https://github.com/icoretech/mattermost-timeline/issues/265)) ([5caec5e](https://github.com/icoretech/mattermost-timeline/commit/5caec5e00677fa5ea21466f8c258088a32ffd853))
+* update dependency vite to v8.3.6 ([#256](https://github.com/icoretech/mattermost-timeline/issues/256)) ([65fc61f](https://github.com/icoretech/mattermost-timeline/commit/65fc61fe2dc1b20643126d48878731c3781b63cd))
+
 ## [2.2.1](https://github.com/icoretech/mattermost-timeline/compare/v2.2.0...v2.2.1) (2026-11-02)
 
 
