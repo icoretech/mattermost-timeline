@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
-    "@formatjs/icu-messageformat-parser": "3.5.22",
+    "@formatjs/icu-messageformat-parser": "3.5.23",
     "@mattermost/client": "11.9.0",
     "@mattermost/types": "11.9.0",
     "@types/node": "26.6.6",
@@ -29,7 +29,7 @@
     "react": "19.3.1",
     "react-doctor": "0.9.22",
     "react-dom": "19.3.1",
-    "react-intl": "12.1.6",
+    "react-intl": "12.1.7",
     "react-redux": "9.3.1",
     "redux": "5.0.1",
     "sass-embedded": "1.108.1",
