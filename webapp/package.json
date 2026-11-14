@@ -33,10 +33,21 @@
     "react-redux": "9.3.1",
     "redux": "5.0.1",
     "sass-embedded": "1.108.2",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vite": "8.3.8",
     "vite-plugin-css-injected-by-js": "5.0.3",
     "vitest": "5.1.0"
+  },
+  "overrides": {
+    "@mattermost/client": {
+      "typescript": "$typescript"
+    },
+    "@mattermost/types": {
+      "typescript": "$typescript"
+    },
+    "mattermost-redux": {
+      "typescript": "$typescript"
+    }
   },
   "allowScripts": {
     "@parcel/watcher@2.6.0": true,

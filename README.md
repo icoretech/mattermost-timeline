@@ -440,8 +440,8 @@ mmctl plugin add key assets/signing-key.asc
 Requirements for development:
 
 - Go 1.27.1+
-- Node.js 24.15+ (CI uses 24.21.0)
-- npm
+- Node.js 26.13.1 (matching CI)
+- npm 11.20.0 (bundled with Node.js 26.13.1)
 - Make
 
 ```bash
@@ -451,6 +451,14 @@ make dist
 ```
 
 The plugin bundle is written to `dist/ch.icorete.mattermost-timeline-<version>.tar.gz`.
+
+The webapp uses the TypeScript 7 native compiler for strict type checking and
+Vite for the classic React-runtime Mattermost bundle. The scoped npm overrides
+update the Mattermost SDK's optional compiler peer to the project's TypeScript
+version; they do not replace SDK code or declarations. React Doctor keeps its
+own transitive TypeScript 5 dependency for its JavaScript compiler API, separate
+from the webapp compiler. Install with the committed lockfile (`npm ci` in
+`webapp`) and run `make apply` before type checking a fresh checkout.
 
 Useful development commands:
 
