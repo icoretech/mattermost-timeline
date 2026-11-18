@@ -29,7 +29,7 @@
     "react": "19.3.1",
     "react-doctor": "0.9.23",
     "react-dom": "19.3.1",
-    "react-intl": "12.1.8",
+    "react-intl": "12.2.0",
     "react-redux": "9.3.1",
     "redux": "5.0.1",
     "sass-embedded": "1.108.2",
