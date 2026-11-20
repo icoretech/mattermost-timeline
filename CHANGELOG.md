@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.3](https://github.com/icoretech/mattermost-timeline/compare/v2.2.2...v2.2.3) (2026-11-20)
+
+
+### Dependencies
+
+* update dependency lucide-react to v1.75.0 ([#281](https://github.com/icoretech/mattermost-timeline/issues/281)) ([2602d79](https://github.com/icoretech/mattermost-timeline/commit/2602d79560e1d6432ffe805c4e4786b87c250ffa))
+* update dependency lucide-react to v1.76.0 ([#285](https://github.com/icoretech/mattermost-timeline/issues/285)) ([44456e6](https://github.com/icoretech/mattermost-timeline/commit/44456e6660eb2bc8979ce6aa1853368836b85a0f))
+* update dependency lucide-react to v1.77.0 ([#286](https://github.com/icoretech/mattermost-timeline/issues/286)) ([783c815](https://github.com/icoretech/mattermost-timeline/commit/783c81501bab7400dd042f0fc5d139f8ac5fecf8))
+* update dependency react-intl to v12.2.0 ([#282](https://github.com/icoretech/mattermost-timeline/issues/282)) ([1d6bbb8](https://github.com/icoretech/mattermost-timeline/commit/1d6bbb88da5ee8f196b525e7d099c879e52a1e11))
+* update Vitest to 5.1.1 ([#283](https://github.com/icoretech/mattermost-timeline/issues/283)) ([e98e85b](https://github.com/icoretech/mattermost-timeline/commit/e98e85ba5c3dabdc9bd030e9ccc385e90a67b1fe))
+
 ## [2.2.2](https://github.com/icoretech/mattermost-timeline/compare/v2.2.1...v2.2.2) (2026-11-18)
 
 
