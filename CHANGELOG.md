@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.2.3](https://github.com/icoretech/mattermost-timeline/compare/v2.2.2...v2.2.3) (2026-11-27)
+
+
+### Dependencies
+
+* update dependency @biomejs/biome to v2.6.9 ([#290](https://github.com/icoretech/mattermost-timeline/issues/290)) ([e65701b](https://github.com/icoretech/mattermost-timeline/commit/e65701b5e6cf303472ec77d9d14270f30bb3899e))
+* update dependency @types/node to v26.6.10 ([#293](https://github.com/icoretech/mattermost-timeline/issues/293)) ([4bf8c9d](https://github.com/icoretech/mattermost-timeline/commit/4bf8c9d4066ed491474a32fbbee44153e3a0ab2c))
+* update dependency @types/node to v26.6.11 ([#295](https://github.com/icoretech/mattermost-timeline/issues/295)) ([01f6fa8](https://github.com/icoretech/mattermost-timeline/commit/01f6fa85bdc482a18c06f1fc3a8eb9a20e770288))
+* update dependency @types/node to v26.6.7 ([#291](https://github.com/icoretech/mattermost-timeline/issues/291)) ([376fcac](https://github.com/icoretech/mattermost-timeline/commit/376fcace45d57a5150a7d93a7a310305ace5c3ac))
+* update dependency @types/react to v19.3.3 ([#292](https://github.com/icoretech/mattermost-timeline/issues/292)) ([262f1e3](https://github.com/icoretech/mattermost-timeline/commit/262f1e31eeca1df5c35c48c356b68a0134bd17b1))
+* update dependency lucide-react to v1.75.0 ([#281](https://github.com/icoretech/mattermost-timeline/issues/281)) ([2602d79](https://github.com/icoretech/mattermost-timeline/commit/2602d79560e1d6432ffe805c4e4786b87c250ffa))
+* update dependency lucide-react to v1.76.0 ([#285](https://github.com/icoretech/mattermost-timeline/issues/285)) ([44456e6](https://github.com/icoretech/mattermost-timeline/commit/44456e6660eb2bc8979ce6aa1853368836b85a0f))
+* update dependency lucide-react to v1.77.0 ([#286](https://github.com/icoretech/mattermost-timeline/issues/286)) ([783c815](https://github.com/icoretech/mattermost-timeline/commit/783c81501bab7400dd042f0fc5d139f8ac5fecf8))
+* update dependency lucide-react to v1.78.0 ([#288](https://github.com/icoretech/mattermost-timeline/issues/288)) ([fdd848e](https://github.com/icoretech/mattermost-timeline/commit/fdd848e4a336dcb61fcd8a8fb00b1f6de065ecf6))
+* update dependency lucide-react to v1.79.0 ([#289](https://github.com/icoretech/mattermost-timeline/issues/289)) ([8a34637](https://github.com/icoretech/mattermost-timeline/commit/8a3463747552bee8fd534d5553fc7d2b536426bc))
+* update dependency lucide-react to v1.80.0 ([#294](https://github.com/icoretech/mattermost-timeline/issues/294)) ([73e1443](https://github.com/icoretech/mattermost-timeline/commit/73e1443f51501cb9b15be59d391687dac720ef6c))
+* update dependency lucide-react to v1.81.0 ([#297](https://github.com/icoretech/mattermost-timeline/issues/297)) ([3a1b3c4](https://github.com/icoretech/mattermost-timeline/commit/3a1b3c4bd170db6e349313c84123cdaca248cba4))
+* update dependency react-intl to v12.2.0 ([#282](https://github.com/icoretech/mattermost-timeline/issues/282)) ([1d6bbb8](https://github.com/icoretech/mattermost-timeline/commit/1d6bbb88da5ee8f196b525e7d099c879e52a1e11))
+* update dependency react-intl to v12.2.1 ([#287](https://github.com/icoretech/mattermost-timeline/issues/287)) ([278d1bc](https://github.com/icoretech/mattermost-timeline/commit/278d1bcdf4bbb2727228f921196ce4f7df3ce366))
+* update dependency react-intl to v12.2.2 ([#296](https://github.com/icoretech/mattermost-timeline/issues/296)) ([8e824f9](https://github.com/icoretech/mattermost-timeline/commit/8e824f973a3061c25c891369800d338852cee4c4))
+* update dependency vite to v8.4.0 ([#298](https://github.com/icoretech/mattermost-timeline/issues/298)) ([0999849](https://github.com/icoretech/mattermost-timeline/commit/0999849f13813289eb0a808febd1bfbb6e5f9056))
+* update dependency vitest to v5.1.2 ([#283](https://github.com/icoretech/mattermost-timeline/issues/283)) ([a7e2194](https://github.com/icoretech/mattermost-timeline/commit/a7e2194e0fa28eeb323d2de01ef8684296522737))
+* update gosaml2, logr and golang.org/x modules ([a61c225](https://github.com/icoretech/mattermost-timeline/commit/a61c2252972bae6a7fa2a199467b845a2ccc9107))
+* update lucide-react to 1.82.0 and refresh the npm lockfile ([726f159](https://github.com/icoretech/mattermost-timeline/commit/726f159709163d9a37f38eda7a215ceb0b6b2300))
+* update Vitest to 5.1.1 ([#283](https://github.com/icoretech/mattermost-timeline/issues/283)) ([e98e85b](https://github.com/icoretech/mattermost-timeline/commit/e98e85ba5c3dabdc9bd030e9ccc385e90a67b1fe))
+
 ## [2.2.2](https://github.com/icoretech/mattermost-timeline/compare/v2.2.1...v2.2.2) (2026-11-18)
 
 
